@@ -1,0 +1,1 @@
+You own "{{{title}}}". Read {{{sharedDirectory}}}/requirement.md, write your proposed solution and implementation plan to {{{sharedDirectory}}}/plan.md, and send Main an IRC message requesting review. Wait for Main's approval before implementation.

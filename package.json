@@ -1,0 +1,27 @@
+{
+  "name": "project-harness",
+  "version": "0.1.0",
+  "private": true,
+  "bin": {
+    "project-harness": "./src/main.ts"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "bun src/main.ts",
+    "check": "tsgo --noEmit",
+    "test": "bun test",
+    "test:integration": "bun test test/integration.test.ts"
+  },
+  "dependencies": {
+    "@oh-my-pi/pi-coding-agent": "link:@oh-my-pi/pi-coding-agent",
+    "@oh-my-pi/pi-natives": "link:@oh-my-pi/pi-natives",
+    "@oh-my-pi/pi-tui": "link:@oh-my-pi/pi-tui",
+    "@oh-my-pi/pi-utils": "link:@oh-my-pi/pi-utils"
+  },
+  "devDependencies": {
+    "@oh-my-pi/pi-ai": "link:@oh-my-pi/pi-ai",
+    "@oh-my-pi/pi-catalog": "link:@oh-my-pi/pi-catalog",
+    "@types/bun": "^1.3.14",
+    "@typescript/native-preview": "latest"
+  }
+}
