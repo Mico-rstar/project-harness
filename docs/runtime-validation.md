@@ -37,6 +37,17 @@ blocked session switching, and tool approval/denial/timeout. Cooperation-log
 tests cover replay, damaged data, bounded queues, failed writes, and gaps.
 These checks do not establish collaboration quality with a live model.
 
+## Remote Linux verification
+
+GitHub Actions run [39003031732](https://github.com/Mico-rstar/oh-my-pi/actions/runs/39003031732)
+completed successfully for fork commit
+`cd6e35d1f9fab094e853899df8698cf3a51eff21`.
+The Ubuntu 24.04 job passed frozen installation, native build from this
+checkout, workspace package type checks, changed SDK lint/format checks,
+IRC contracts, and source CLI/worker verification. The native build took
+about 13 minutes. This scoped workflow does not run the full upstream suite
+or replace the limitations recorded below.
+
 ## Matching native build
 
 The addon was built from the pinned checkout using Rust
