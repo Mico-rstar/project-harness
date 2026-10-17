@@ -6,19 +6,20 @@
 
 ## 安装
 
-需要 Bun **1.4+**、Git，以及本地 oh-my-pi checkout。当前目录关系为：
+需要 `omp.lock.json` 固定的 Bun（当前 **1.4.3**）、Git，以及固定提交的完整 omp fork checkout。当前目录关系为：
 
 ```text
 /Users/linrunxin/projects/
-├── project-harness/
+├── project-harness/project-harness/
 └── research/oh-my-pi/
 ```
 
-先在 omp 中完成标准依赖和 native 构建：
+先取得 `omp.lock.json` 中的仓库和完整 commit；在该 checkout 安装依赖、构建 native：
 
 ```sh
 cd /Users/linrunxin/projects/research/oh-my-pi
-bun setup
+bun install --frozen-lockfile
+bun run build:native
 ```
 
 native 构建需要仓库 `rust-toolchain.toml` 指定的 Rust，当前为 `nightly-2026-08-12`。安装 Rust 和下载构建依赖需要可用网络。
@@ -39,8 +40,10 @@ bun link
 cd ../catalog
 bun link
 
-cd /Users/linrunxin/projects/project-harness
-bun install
+cd /Users/linrunxin/projects/project-harness/project-harness
+bun install --frozen-lockfile
+bun run build:omp-native
+bun run verify:omp
 ```
 
 `package.json` 中的链接必须与注册名一致：
@@ -52,11 +55,31 @@ bun install
 
 对应写法是 `link:@oh-my-pi/pi-coding-agent` 等。当前使用的 Bun 未能解析先前的相对路径 `link:` 写法，因此安装依赖前需要完成上面的注册。
 
-### 当前环境的 native 验证基线
+### 固定依赖与 native
 
-本地 omp 源码版本为 **18.6.2**。当前环境因 Rust 工具链下载受阻，使用已安装 omp 提取的 **18.3.2** native addon，复制到 omp 的忽略路径 `packages/natives/native/pi_natives.darwin-arm64.node`，完成了现有测试。这是经过当前用例验证的兼容性回退，**不是与源码版本匹配的 native 构建**。
+本地链接只指定包位置，`bun.lock` 不会固定被链接的源码。`omp.lock.json` 另外固定 fork commit、官方基线、Bun 和原生构建输入。`verify:omp` 校验六包来自同一干净 checkout，以及实际加载 addon 的来源记录和 SHA256。
 
-标准安装仍以 `bun setup` 生成的匹配版本为准。若临时复用已安装 omp 的缓存 addon，需使用普通文件副本：不要把目标链接到旧版本的 `~/.omp/natives/<version>/`，因为 loader 会清理旧版本缓存。其他平台或未覆盖的 native 功能需要另行验证。
+native 由匹配源码构建；此前 18.3.2 addon 回退不作为正式基线。Rust 使用仓库 `rust-toolchain.toml`，macOS 还需要 CMake/Ninja。构建记录位于 omp Git 元数据目录，不提交二进制。不要软链接旧版 `~/.omp/natives/` 缓存，loader 会清理它。
+
+fork 分支、官方同步、双仓验证和回退步骤见 [维护指南](docs/omp-maintenance.md)。日常启动不会自动拉取或修改依赖。
+
+## 嵌入核心 runtime
+
+默认 `project` 仍运行 TUI；嵌入应用从 `src/runtime.ts` 导入 `startMainSession`，直接调用 SDK，无需终端或独立服务。
+
+| 接口 | 作用 |
+| --- | --- |
+| `startMainSession(options, host)` | 创建/恢复项目唯一 Main 和关联 owner |
+| `snapshot()` / `observe(listener)` | 当前执行快照与同一切点之后的事件 |
+| `readSession(id, options)` | Main、owner 或子任务的原生会话历史与运行信息 |
+| `readCooperation(options)` | 真实 IRC 消息、广播关联、投递回执与记录覆盖范围 |
+| `submitMainInput()` / `getInputReceipt()` | 用户输入与受理查询，默认 follow-up |
+| `respondToUIRequest()` | 回答 SDK 已发出的确认/选择/输入请求 |
+| `abortMainTurn()` / `close()` | 停止当前执行 / 关闭项目并释放锁 |
+
+启动会话不自动调用模型；恢复 owner 不自动继续执行。host 支持 `headless`、事件式 UI 和内部 TUI adapter。没有 UI 时保持原工具审批拒绝策略；计划认可仍由 Main 通过 IRC 完成。
+
+执行 `bun run example:runtime` 可运行有限生命周期、确定性模型的嵌入示例。API 类型见 `src/contracts.ts`。本版本不包含 Web 服务、页面或 Markdown 业务状态解析。
 
 ## 启动与恢复
 
@@ -104,6 +127,7 @@ project --repo /absolute/path/to/repo --project my-project --resume
 │       ├── plan.md
 │       └── progress.md
 ├── worktrees/<ownerId>/
+├── observations/cooperation.jsonl
 └── sessions/
     ├── <Main 会话>.jsonl
     └── <Main artifacts 目录>/
@@ -155,4 +179,4 @@ bun run test:integration
 - **恢复时会话或 worktree 缺失、仓库或分支错绑**：启动失败，不自动创建替代会话。先定位并恢复正确资源。owner 在原分支上的新提交和脏修改允许保留。
 - **退出**：停止接收新 owner，abort/dispose 已创建会话，保留共享文件、代码 worktree、分支和转录。使用同一项目名加 `--resume` 恢复。
 
-MVP 没有结构化进度状态、审批状态机、额外项目面板或完整 task observer UI。提交、合并、推送和 PR 均需遵守目标仓库规则并取得授权，harness 不自动执行。当前实施未创建代码提交，也未观察到 omp tracked 文件修改；native 副本属于忽略的构建产物。
+MVP 没有结构化进度状态、审批状态机、额外项目面板或完整 task observer UI。提交、合并、推送和 PR 均需遵守目标仓库规则并取得授权，runtime 不自动执行。omp 的必要 SDK 补丁由 fork 的 `harness-runtime` 分支维护；native 是忽略的本机构建产物，依赖基线与升级约束见维护指南。

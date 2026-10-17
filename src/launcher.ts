@@ -77,10 +77,7 @@ async function promptForProjectName(repoRoot: string): Promise<string> {
   }
 }
 
-async function resolveProjectName(
-  explicit: string | undefined,
-  repoRoot: string,
-): Promise<string> {
+async function resolveProjectName(explicit: string | undefined, repoRoot: string): Promise<string> {
   if (explicit !== undefined) return validateSlug(explicit, "project");
   const derived = slugifyProjectName(path.basename(repoRoot));
   return derived.length > 0 ? derived : promptForProjectName(repoRoot);
@@ -92,7 +89,8 @@ const defaultChooser: ProjectChooser = async (projects) => {
     projects.map((listing) => ({
       value: listing.projectName,
       label: listing.projectName,
-      description: listing.modifiedAt > 0 ? new Date(listing.modifiedAt).toLocaleString() : undefined,
+      description:
+        listing.modifiedAt > 0 ? new Date(listing.modifiedAt).toLocaleString() : undefined,
     })),
   );
   if (value === null) return null;
@@ -114,9 +112,7 @@ export async function resolveLaunchOptions(
   const ready = await resolveRepoRoot(flags, cwd);
   const repo = ready.root;
   const bootstrap: RepoBootstrap = ready.bootstrap;
-  const forRepo = (await listProjects(dataHome)).filter(
-    (listing) => listing.repoRoot === repo,
-  );
+  const forRepo = (await listProjects(dataHome)).filter((listing) => listing.repoRoot === repo);
   if (flags.project === undefined) {
     if (forRepo.length === 1) {
       return { repo, project: forRepo[0].projectName, resume: true, bootstrap };

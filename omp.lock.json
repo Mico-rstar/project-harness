@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "repository": "https://github.com/Mico-rstar/oh-my-pi.git",
+  "commit": "cd6e35d1f9fab094e853899df8698cf3a51eff21",
+  "upstreamCommit": "3f000c524cf82279f804ffd7526280cc9a5f25fe",
+  "bunVersion": "1.4.3",
+  "nativeInputHash": "839f2afe3a218ad0e1d5fab0718caa75f6c8b91bcc35429cdc4cc9f901bd1ce4"
+}
