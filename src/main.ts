@@ -10,19 +10,14 @@ import { ProjectStore } from "./project";
 import { OwnerCoordinator } from "./owners";
 import { projectExtension } from "./extension";
 import { validateSessionWorkspace } from "./sessions";
+import { resolveLaunchOptions, type LaunchFlags, type LaunchOptions } from "./launcher";
 import mainPrompt from "./prompts/main.md" with { type: "text" };
 import startupPrompt from "./prompts/startup.md" with { type: "text" };
 import recoveryPrompt from "./prompts/recovery.md" with { type: "text" };
 
 export const MAIN_TOOLS = ["read", "write", "edit", "spawn_owner"];
 
-export interface LaunchOptions {
-  repo: string;
-  project: string;
-  resume: boolean;
-}
-
-export function parseLaunchOptions(args: string[]): LaunchOptions | undefined {
+export function parseLaunchOptions(args: string[]): LaunchFlags | undefined {
   const { values } = util.parseArgs({
     args,
     options: {
@@ -34,11 +29,6 @@ export function parseLaunchOptions(args: string[]): LaunchOptions | undefined {
     strict: true,
   });
   if (values.help) return undefined;
-  if (!values.repo || !values.project) {
-    throw new Error(
-      "Usage: project-harness --repo <Git repository> --project <project slug> [--resume]",
-    );
-  }
   return { repo: values.repo, project: values.project, resume: values.resume ?? false };
 }
 
@@ -189,18 +179,34 @@ export async function runHarness(options: LaunchOptions): Promise<void> {
 
 if (import.meta.main) {
   try {
-    const options = parseLaunchOptions(process.argv.slice(2));
-    if (!options) {
+    const flags = parseLaunchOptions(process.argv.slice(2));
+    if (!flags) {
       process.stdout.write(
-        "Usage: project-harness --repo <Git repository> --project <project slug> [--resume]\n",
+        [
+          "Usage: project [--repo <Git repository>] [--project <slug>] [--resume]",
+          "",
+          "Run bare inside a Git repository to create its harness project, or to",
+          "resume it when one already exists. The project name defaults to the",
+          "repository directory name; pass --project to choose another.",
+          "",
+        ].join("\n"),
       );
     } else {
+      const options = await resolveLaunchOptions(flags, process.cwd());
+      const actions = [
+        ...(options.bootstrap?.initialized ? ["initialized Git repository"] : []),
+        ...(options.bootstrap?.committed ? ["created empty initial commit"] : []),
+      ];
+      const suffix = actions.length > 0 ? ` (${actions.join(", ")})` : "";
+      process.stdout.write(
+        `${options.resume ? "Resuming" : "Creating"} project "${options.project}" for ${options.repo}${suffix}\n`,
+      );
       await runHarness(options);
     }
   } catch (error) {
     logger.error("Project harness failed", { error: String(error) });
     process.stderr.write(
-      `project-harness: ${error instanceof Error ? error.message : String(error)}\n`,
+      `project: ${error instanceof Error ? error.message : String(error)}\n`,
     );
     process.exitCode = 1;
   }

@@ -60,23 +60,32 @@ bun install
 
 ## 启动与恢复
 
-目标仓库须是本地 Git 仓库；创建 owner 前须已有提交。沿用用户现有的 omp 模型与认证配置。
+沿用用户现有的 omp 模型与认证配置。最常用的方式：cd 到目标目录后直接启动，harness 自动采用当前目录：
 
 ```sh
-cd /Users/linrunxin/projects/project-harness
-
-# 首次启动
-bun run dev --repo /absolute/path/to/repo --project my-project
-
-# 恢复同一项目
-bun run dev --repo /absolute/path/to/repo --project my-project --resume
+cd /path/to/your/repo
+project
 ```
 
-也可以在本目录执行 `bun link` 注册 CLI，然后使用 `project-harness --repo ... --project ...`。确保 `~/.bun/bin` 在 PATH 中。
+- 当前仓库没有项目时直接创建，项目名默认为仓库目录名（小写 slug）。
+- 当前仓库已有项目时直接恢复，等价于显式 `--resume`；同一仓库绑定多个项目时会出现选择列表。
+- **从零开始新项目**：完全空白的目录（无 `.git`）会被自动接管——`git init` 并补一个空的初始提交（绝不暂存用户文件）；`git init` 过但 0 提交的仓库同样自动补空提交。此操作要求仓库已配置 `user.name` 和 `user.email`；若 index 已有暂存内容，会拒绝启动并保留暂存内容。owner 的分支从这个提交创建。
+- 非空且非 Git 的目录会拒绝启动并提示；此时显式 `--repo` 指定的目录无论是否为 Git 仓库都会被自动接管。
+- `--repo` 指向不存在的路径会报错，不会隐式创建目录。
+
+也可以显式指定，参数可按需组合：
+
+```sh
+project --repo /absolute/path/to/repo              # 项目名默认取仓库目录名
+project --repo /absolute/path/to/repo --project my-project
+project --repo /absolute/path/to/repo --project my-project --resume
+```
+
+也可以在本目录执行 `bun link` 注册 CLI（bin 名为 `project`），或用 `bun run dev` 加同样的参数。确保 `~/.bun/bin` 在 PATH 中。
 
 项目名和 owner ID 使用 1–64 字符的小写字母、数字和单连字符 slug；owner ID `main` 为保留身份。`--repo` 可以指向主仓库内的子目录或该仓库的 linked worktree，数据绑定到规范化后的主仓库根路径。
 
-已有项目必须显式传入 `--resume`。启动期间持有项目独占锁，同一项目不能被两个 harness 进程同时打开。
+已有项目无需显式 `--resume`，按仓库和项目名匹配到已存在的项目即自动恢复。启动期间持有项目独占锁，同一项目不能被两个 harness 进程同时打开。
 
 ## 工作目录与协作
 
@@ -130,6 +139,7 @@ bun run test:integration
 当前已通过：
 
 - 项目持久化测试：9 个用例，覆盖显式恢复、进程锁、并发绑定更新、目录归属、脏文件和新提交保留，以及缺失会话/分支错绑拒绝恢复。
+- 启动解析测试：8 个用例，覆盖项目名 slug 化、数据目录枚举（跳过损坏条目、按最近使用排序）、cwd 自动采用仓库、已有项目自动恢复、多项目选择和错误提示。
 - 会话恢复校验：4 个用例，覆盖缺失或错误的原始 cwd、SDK 静默 cwd 回退，以及额外工作目录错绑。
 - SDK 集成测试：两个真实 SDK owner 会话使用确定性的 mock provider，覆盖计划文件、原生 IRC、task 工作区继承及退出后恢复为空闲。
 - TypeScript 检查。

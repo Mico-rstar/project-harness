@@ -217,6 +217,22 @@ describe("SDK owner coordination", () => {
       const originalMainFile = main.session.sessionManager.getSessionFile();
       expect(await main.session.newSession()).toBe(false);
       expect(main.session.sessionManager.getSessionFile()).toBe(originalMainFile);
+      // Session-leaving slash commands are consumed by the extension with an
+      // explanation, before any native picker can open and trap the user.
+      const resumeAttempt = await main.session.extensionRunner?.emitInput(
+        "/resume",
+        undefined,
+        "rpc",
+      );
+      expect(resumeAttempt?.handled).toBe(true);
+      const freshAttempt = await main.session.extensionRunner?.emitInput("/new", undefined, "rpc");
+      expect(freshAttempt?.handled).toBe(true);
+      const ordinaryAttempt = await main.session.extensionRunner?.emitInput(
+        "/model",
+        undefined,
+        "rpc",
+      );
+      expect(ordinaryAttempt?.handled).not.toBe(true);
       for (const id of ["owner-a", "owner-b"]) {
         await Bun.write(path.join(store.paths.shared, id, "requirement.md"), `Implement ${id}`);
       }
