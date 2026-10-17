@@ -3,6 +3,7 @@ import { IrcBus } from "@oh-my-pi/pi-coding-agent/irc/bus";
 import { AgentRegistry } from "@oh-my-pi/pi-coding-agent/registry/agent-registry";
 import { registerPersistedSubagents } from "@oh-my-pi/pi-coding-agent/registry/persisted-agents";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
+import { readSessionHeaderId } from "@oh-my-pi/pi-coding-agent/session/session-loader";
 import type { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 import type { CreateAgentSessionResult } from "@oh-my-pi/pi-coding-agent/sdk";
 import { initializeExtensions } from "@oh-my-pi/pi-coding-agent/modes/runtime-init";
@@ -203,7 +204,13 @@ export async function startMainSession(
       cooperation: structuredClone(cooperationEvents),
       pendingUIRequests: structuredClone([...pendingUI.values()].map(({ request }) => request)),
       inputReceipts: structuredClone([...inputs.values()].map((receipt) => ({ ...receipt }))),
-      health: { degraded: healthIssues.length > 0, issues: [...healthIssues] },
+      health: {
+        degraded: healthIssues.length > 0 || [...sessions.values()].some((item) => item.error),
+        issues: [
+          ...healthIssues,
+          ...[...sessions.values()].flatMap((item) => (item.error ? [item.error] : [])),
+        ],
+      },
       closing,
     };
   };
@@ -415,6 +422,13 @@ export async function startMainSession(
         AgentRegistry.global(),
         main.session.sessionManager.getSessionFile(),
       );
+      for (const ref of AgentRegistry.global().list()) {
+        if (ref.kind !== "sub" || !ref.sessionFile) continue;
+        const sessionId = await readSessionHeaderId(ref.sessionFile);
+        if (!sessionId) continue;
+        const history = registryHistory.get(ref.id) ?? { sessionFile: ref.sessionFile };
+        registryHistory.set(sessionId, history);
+      }
     }
     await main.session.sendCustomMessage(
       {

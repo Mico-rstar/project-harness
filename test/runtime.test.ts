@@ -168,6 +168,7 @@ describe("production harness runtime", () => {
         ),
       );
       const childIds: string[] = [];
+      const childSessionIds = new Map<string, string>();
       for (const id of ["owner-one", "owner-two"]) {
         const ownerSession = runtime.snapshot().sessions.find((session) => session.ownerId === id);
         expect(ownerSession).toBeDefined();
@@ -189,6 +190,7 @@ describe("production harness runtime", () => {
           const page = await runtime!.readSession(child!.id);
           return page.entries.some((entry) => entry.type === "message") ? page : undefined;
         });
+        childSessionIds.set(child!.id, childPage.sessionId);
         expect(
           childPage.entries.some(
             (entry) =>
@@ -222,7 +224,9 @@ describe("production harness runtime", () => {
         dependencies,
       );
       for (const childId of childIds) {
+        const restoredBySessionId = await runtime.readSession(childSessionIds.get(childId)!);
         const page = await runtime.readSession(childId);
+        expect(restoredBySessionId.entries).toEqual(page.entries);
         expect(page.sessionId).not.toBe(childId);
         expect(
           page.entries.some(
