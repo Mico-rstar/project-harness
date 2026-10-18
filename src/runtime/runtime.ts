@@ -28,7 +28,7 @@ import type {
 import { createMainSession, MAIN_TOOLS } from "./main-session";
 import { OwnerCoordinator } from "./owners";
 import { ProjectStore } from "./project";
-import type { LaunchOptions } from "./launcher";
+import type { LaunchOptions } from "./contracts";
 import type { OpenProjectOptions } from "./project";
 import {
   TASK_SUBAGENT_EVENT_CHANNEL,
@@ -37,6 +37,7 @@ import {
 import { createRuntimeUIContext, type PendingUI } from "./runtime-ui";
 
 const INPUT_TTL_MS = 60 * 60 * 1000;
+export type { MainSessionDependencies } from "./main-session";
 const MAX_INPUTS = 4096;
 
 function sameImages(left: MainInput["images"], right: MainInput["images"]): boolean {

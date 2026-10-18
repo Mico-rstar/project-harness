@@ -3,7 +3,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as vcs from "@oh-my-pi/pi-natives/vcs";
-import { type OwnerBinding, ProjectStore, validateSlug } from "../src/project";
+import { type OwnerBinding, ProjectStore, validateSlug } from "../src/runtime/project";
 
 const roots: string[] = [];
 const stores: ProjectStore[] = [];

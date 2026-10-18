@@ -5,7 +5,7 @@ import { createMockModel } from "@oh-my-pi/pi-ai/providers/mock";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import * as vcs from "@oh-my-pi/pi-natives/vcs";
-import type { HarnessRuntime } from "../src/contracts";
+import type { HarnessRuntime } from "../src/runtime";
 import { startMainSession } from "../src/runtime";
 
 const provider = "project-harness-runtime-example";

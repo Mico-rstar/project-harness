@@ -3,6 +3,15 @@ import type { AgentSessionEvent } from "@oh-my-pi/pi-coding-agent/session/agent-
 import type { SessionEntry } from "@oh-my-pi/pi-coding-agent/session/session-entries";
 import type { CooperationMessage, CooperationPage, IrcObservation } from "./cooperation-log";
 import type { OwnerBinding } from "./project";
+import type { RepoBootstrap } from "./repo-setup";
+
+/** Fully resolved launch targets accepted by the runtime and TUI host. */
+export interface LaunchOptions {
+  repo: string;
+  project: string;
+  resume: boolean;
+  bootstrap?: RepoBootstrap;
+}
 
 export type { CooperationMessage, CooperationPage, IrcObservation };
 

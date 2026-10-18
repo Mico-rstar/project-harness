@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
 import * as util from "node:util";
 import { logger } from "@oh-my-pi/pi-utils";
-import { resolveLaunchOptions, type LaunchFlags } from "./launcher";
+import { resolveLaunchOptions, type LaunchFlags } from "./tui/launcher";
 import { runHarness } from "./tui";
 
 export { runHarness } from "./tui";
-export { MAIN_TOOLS } from "./main-session";
+export { MAIN_TOOLS } from "./runtime/main-session";
 
 export function parseLaunchOptions(args: string[]): LaunchFlags | undefined {
   const { values } = util.parseArgs({

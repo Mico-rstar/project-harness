@@ -9,15 +9,15 @@
 需要 `omp.lock.json` 固定的 Bun（当前 **1.4.3**）、Git，以及固定提交的完整 omp fork checkout。当前目录关系为：
 
 ```text
-/Users/linrunxin/projects/
-├── project-harness/project-harness/
-└── research/oh-my-pi/
+~/projects/
+├── project-harness/
+└── oh-my-pi/
 ```
 
 先取得 `omp.lock.json` 中的仓库和完整 commit；在该 checkout 安装依赖、构建 native：
 
 ```sh
-cd /Users/linrunxin/projects/research/oh-my-pi
+cd ~/projects/oh-my-pi
 bun install --frozen-lockfile
 bun run build:native
 ```
@@ -27,7 +27,7 @@ native 构建需要仓库 `rust-toolchain.toml` 指定的 Rust，当前为 `nigh
 本项目使用 Bun 的已注册包链接。先注册四个运行依赖，以及两个测试依赖：
 
 ```sh
-cd /Users/linrunxin/projects/research/oh-my-pi/packages/coding-agent
+cd ~/projects/oh-my-pi/packages/coding-agent
 bun link
 cd ../natives
 bun link
@@ -40,7 +40,7 @@ bun link
 cd ../catalog
 bun link
 
-cd /Users/linrunxin/projects/project-harness/project-harness
+cd ~/projects/project-harness
 bun install --frozen-lockfile
 bun run build:omp-native
 bun run verify:omp
@@ -65,7 +65,7 @@ fork 分支、官方同步、双仓验证和回退步骤见 [维护指南](docs/
 
 ## 嵌入核心 runtime
 
-默认 `project` 仍运行 TUI；嵌入应用从 `src/runtime.ts` 导入 `startMainSession`，直接调用 SDK，无需终端或独立服务。
+默认 `project` 仍运行 TUI；嵌入应用从 `src/runtime/index.ts` 导入 `startMainSession`，直接调用 SDK，无需终端或独立服务。
 
 | 接口 | 作用 |
 | --- | --- |
@@ -79,7 +79,9 @@ fork 分支、官方同步、双仓验证和回退步骤见 [维护指南](docs/
 
 启动会话不自动调用模型；恢复 owner 不自动继续执行。host 支持 `headless`、事件式 UI 和内部 TUI adapter。没有 UI 时保持原工具审批拒绝策略；计划认可仍由 Main 通过 IRC 完成。
 
-执行 `bun run example:runtime` 可运行有限生命周期、确定性模型的嵌入示例。API 类型见 `src/contracts.ts`。本版本不包含 Web 服务、页面或 Markdown 业务状态解析。
+执行 `bun run example:runtime` 可运行有限生命周期、确定性模型的嵌入示例。API 类型见 `src/runtime/contracts.ts`。
+
+源码按职责组织：`src/runtime/` 包含核心会话、协作、项目持久化与静态提示词；`src/tui/` 包含终端交互和启动选择器；`src/main.ts` 为 CLI 入口。本版本不包含 Web 服务、页面或 Markdown 业务状态解析。
 
 ## 启动与恢复
 

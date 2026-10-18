@@ -1,10 +1,9 @@
 import { InteractiveMode } from "@oh-my-pi/pi-coding-agent/modes/interactive-mode";
 import { submitInteractiveInput } from "@oh-my-pi/pi-coding-agent/main";
 import { VERSION } from "@oh-my-pi/pi-utils";
-import type { LaunchOptions } from "./launcher";
-import { startMainSession } from "./runtime";
-import { runtimeSession } from "./runtime-internals";
-import { MAIN_TOOLS } from "./main-session";
+import { startMainSession, type LaunchOptions } from "../runtime";
+import { runtimeSession } from "../runtime/runtime-internals";
+import { MAIN_TOOLS } from "../runtime/main-session";
 
 export async function runHarness(options: LaunchOptions): Promise<void> {
   const runtime = await startMainSession(options, { kind: "tui" });

@@ -10,11 +10,11 @@ import { createAgentSession, type CreateAgentSessionResult } from "@oh-my-pi/pi-
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { AgentRegistry } from "@oh-my-pi/pi-coding-agent/registry/agent-registry";
 import * as vcs from "@oh-my-pi/pi-natives/vcs";
-import { ProjectStore } from "../src/project";
-import { OwnerCoordinator } from "../src/owners";
-import { projectExtension } from "../src/extension";
-import { MAIN_TOOLS } from "../src/main";
-import { validateSessionWorkspace } from "../src/sessions";
+import { ProjectStore } from "../src/runtime/project";
+import { OwnerCoordinator } from "../src/runtime/owners";
+import { projectExtension } from "../src/runtime/extension";
+import { MAIN_TOOLS } from "../src/runtime/main-session";
+import { validateSessionWorkspace } from "../src/runtime/sessions";
 
 function call(name: string, argumentsValue: Record<string, unknown>): MockContent {
   return { type: "toolCall", name, arguments: argumentsValue };
@@ -329,7 +329,10 @@ describe("SDK owner coordination", () => {
       const requestsBeforeResume = mock.calls.length;
       await coordinator.restore();
       expect(mock.calls.length).toBe(requestsBeforeResume);
-			expect(store.manifest?.owners.map((owner) => owner.id).sort()).toEqual(["owner-a", "owner-b"]);
+      expect(store.manifest?.owners.map((owner) => owner.id).sort()).toEqual([
+        "owner-a",
+        "owner-b",
+      ]);
       for (const binding of store.manifest!.owners) {
         const owner = AgentRegistry.global().get(binding.id)!;
         expect(owner.status).toBe("idle");

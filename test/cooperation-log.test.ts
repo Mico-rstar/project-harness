@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { CooperationLog } from "../src/cooperation-log";
+import { CooperationLog } from "../src/runtime/cooperation-log";
 
 const roots: string[] = [];
 const logs: CooperationLog[] = [];

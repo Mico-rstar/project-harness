@@ -5,17 +5,9 @@ import {
   promptStandaloneText,
   selectStandaloneItem,
 } from "@oh-my-pi/pi-tui/apps/standalone-picker";
-import { type ProjectListing, listProjects, validateSlug } from "./project";
-import { type RepoBootstrap, type RepoReady, ensureRepoReady } from "./repo-setup";
-
-/** Fully resolved launch targets handed to runHarness. */
-export interface LaunchOptions {
-  repo: string;
-  project: string;
-  resume: boolean;
-  /** Repository side effects applied during launch. */
-  bootstrap?: RepoBootstrap;
-}
+import { type ProjectListing, listProjects, validateSlug } from "../runtime/project";
+import { type RepoBootstrap, type RepoReady, ensureRepoReady } from "../runtime/repo-setup";
+import type { LaunchOptions } from "../runtime/contracts";
 
 /** Raw CLI flags before cwd-based defaults are applied. */
 export interface LaunchFlags {

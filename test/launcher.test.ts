@@ -3,13 +3,13 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as vcs from "@oh-my-pi/pi-natives/vcs";
-import { listProjects, ProjectStore } from "../src/project";
+import { listProjects, ProjectStore } from "../src/runtime/project";
 import {
   resolveLaunchOptions,
   slugifyProjectName,
   type LaunchFlags,
   type ProjectChooser,
-} from "../src/launcher";
+} from "../src/tui/launcher";
 
 const roots: string[] = [];
 const stores: ProjectStore[] = [];
@@ -201,7 +201,12 @@ describe("launch option resolution", () => {
     }
 
     const picked = chooserPicking("beta");
-    const options = await resolveLaunchOptions({ resume: false }, f.repo, f.dataHome, picked.chooser);
+    const options = await resolveLaunchOptions(
+      { resume: false },
+      f.repo,
+      f.dataHome,
+      picked.chooser,
+    );
     expect(options).toEqual({
       repo: f.repo,
       project: "beta",

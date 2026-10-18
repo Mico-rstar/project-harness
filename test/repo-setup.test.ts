@@ -3,7 +3,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as vcs from "@oh-my-pi/pi-natives/vcs";
-import { ensureRepoReady } from "../src/repo-setup";
+import { ensureRepoReady } from "../src/runtime/repo-setup";
 
 const roots: string[] = [];
 

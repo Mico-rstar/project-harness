@@ -7,10 +7,10 @@ import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { AgentRegistry } from "@oh-my-pi/pi-coding-agent/registry/agent-registry";
 import * as vcs from "@oh-my-pi/pi-natives/vcs";
-import { MAIN_TOOLS } from "../src/main-session";
-import { runtimeSession } from "../src/runtime-internals";
+import { MAIN_TOOLS } from "../src/runtime/main-session";
+import { runtimeSession } from "../src/runtime/runtime-internals";
 import { startMainSession } from "../src/runtime";
-import type { HarnessRuntime } from "../src/contracts";
+import type { HarnessRuntime } from "../src/runtime";
 
 function call(name: string, argumentsValue: Record<string, unknown>): MockContent {
   return { type: "toolCall", name, arguments: argumentsValue };

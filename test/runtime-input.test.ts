@@ -13,9 +13,9 @@ import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { AgentRegistry } from "@oh-my-pi/pi-coding-agent/registry/agent-registry";
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import * as vcs from "@oh-my-pi/pi-natives/vcs";
-import type { HarnessRuntime, RuntimeEvent, RuntimeHost, RuntimeUIRequest } from "../src/contracts";
+import type { HarnessRuntime, RuntimeEvent, RuntimeHost, RuntimeUIRequest } from "../src/runtime";
 import { startMainSession } from "../src/runtime";
-import { ensureRepoReady } from "../src/repo-setup";
+import { ensureRepoReady } from "../src/runtime/repo-setup";
 
 const roots: string[] = [];
 const provider = "harness-runtime-input-test";

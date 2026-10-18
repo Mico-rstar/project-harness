@@ -3,7 +3,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
-import { validateSessionWorkspace } from "../src/sessions";
+import { validateSessionWorkspace } from "../src/runtime/sessions";
 
 const roots: string[] = [];
 const managers: SessionManager[] = [];
