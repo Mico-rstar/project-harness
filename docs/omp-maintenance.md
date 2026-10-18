@@ -122,6 +122,11 @@ Use an isolated session-data copy for recovery tests. Do not have fork CI
 fetch a floating harness branch or rely on stale native artifacts from
 unrelated CI runs.
 
+Record verification results in the runtime or dependency-update PR and link
+the relevant CI runs. Track unresolved failures in GitHub issues. On each
+upgrade, compare existing failures explicitly and distinguish scoped CI
+success from full-suite success.
+
 ## Rollback
 
 Keep the previous known-good harness SHA, omp SHA, pin, lockfiles, toolchain,
