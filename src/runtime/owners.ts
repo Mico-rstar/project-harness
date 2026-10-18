@@ -24,6 +24,9 @@ export interface SpawnReceipt extends OwnerBinding {
   history: string;
 }
 
+export type OwnerSessionReady = (ownerId: string, live: CreateAgentSessionResult) => void;
+export type OwnerSessionUnready = (ownerId: string, live: CreateAgentSessionResult) => void;
+
 export class OwnerCoordinator {
   #store: ProjectStore;
   #main: CreateAgentSessionResult | undefined;
@@ -32,6 +35,8 @@ export class OwnerCoordinator {
   #closing = false;
   #creationAbort = new AbortController();
   #cleanup: Promise<void> | undefined;
+  #onSessionReady: OwnerSessionReady | undefined;
+  #onSessionUnready: OwnerSessionUnready | undefined;
 
   constructor(store: ProjectStore) {
     this.#store = store;
@@ -41,10 +46,19 @@ export class OwnerCoordinator {
     this.#main = main;
   }
 
+  setOnSessionReady(callback: OwnerSessionReady | undefined): void {
+    this.#onSessionReady = callback;
+  }
+
+  setOnSessionUnready(callback: OwnerSessionUnready | undefined): void {
+    this.#onSessionUnready = callback;
+  }
+
   async restore(): Promise<void> {
     await this.#store.validateOwners();
     for (const binding of this.#store.manifest?.owners ?? []) {
       const live = await this.#createSession(binding, true);
+      this.#onSessionReady?.(binding.id, live.result);
       this.#owners.set(binding.id, live);
     }
   }
@@ -121,6 +135,7 @@ export class OwnerCoordinator {
       await this.#store.addOwner(binding);
       bound = true;
       this.#owners.set(ownerId, live);
+      this.#onSessionReady?.(ownerId, live.result);
       const turn = live.result.session.prompt(
         prompt.render(assignmentPrompt, {
           title,
@@ -132,6 +147,7 @@ export class OwnerCoordinator {
       return { ...binding, existing: false, history: `history://${ownerId}` };
     } catch (error) {
       if (live && !bound) {
+        this.#onSessionUnready?.(ownerId, live.result);
         live.unsubscribe();
         await live.result.session.dispose();
       }

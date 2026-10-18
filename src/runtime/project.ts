@@ -3,7 +3,13 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { writeArtifact } from "@oh-my-pi/pi-coding-agent/session/artifacts";
 import * as vcs from "@oh-my-pi/pi-natives/vcs";
-import { type FileLockHandle, isEexist, isEnoent, tryAcquireFileLock } from "@oh-my-pi/pi-utils";
+import {
+  type FileLockHandle,
+  isEexist,
+  isEnoent,
+  logger,
+  tryAcquireFileLock,
+} from "@oh-my-pi/pi-utils";
 
 export interface OwnerBinding {
   id: string;
@@ -142,6 +148,87 @@ async function initializeIndex(file: string): Promise<void> {
     if (isEexist(error)) return;
     throw error;
   }
+}
+
+/** A project discovered on disk, for pickers and cwd-based resume. */
+export interface ProjectListing {
+  /** Project data root containing project.json. */
+  root: string;
+  projectName: string;
+  repoRoot: string;
+  mainSessionFile: string;
+  /** Main session file mtime, falling back to the manifest mtime. */
+  modifiedAt: number;
+}
+
+async function newestMtime(files: string[]): Promise<number> {
+  for (const file of files) {
+    const stat = await fs.stat(file).catch((error) => {
+      if (isEnoent(error)) return undefined;
+      throw error;
+    });
+    if (stat) return stat.mtimeMs;
+  }
+  return 0;
+}
+
+/**
+ * Enumerate known projects under the data home (default ~/.local/share),
+ * newest first. Unreadable or invalid entries are skipped with a warning so
+ * one damaged project cannot hide the rest.
+ */
+export async function listProjects(dataHome?: string): Promise<ProjectListing[]> {
+  const home = path.resolve(dataHome ?? path.join(os.homedir(), ".local", "share"));
+  const registry = path.join(home, "project-harness");
+  const hashes = await fs.readdir(registry).catch((error) => {
+    if (isEnoent(error)) return [] as string[];
+    throw error;
+  });
+  const listing: ProjectListing[] = [];
+  for (const hash of hashes) {
+    const hashDir = path.join(registry, hash);
+    const stat = await fs.stat(hashDir).catch((error) => {
+      if (isEnoent(error)) return undefined;
+      throw error;
+    });
+    if (!stat?.isDirectory()) continue;
+    const names = await fs.readdir(hashDir).catch((error) => {
+      if (isEnoent(error)) return [] as string[];
+      throw error;
+    });
+    for (const name of names) {
+      const root = path.join(hashDir, name);
+      const manifestFile = path.join(root, "project.json");
+      let saved: unknown;
+      try {
+        saved = await Bun.file(manifestFile).json();
+      } catch (error) {
+        if (!isEnoent(error)) {
+          logger.warn("Skipping unreadable project manifest", {
+            file: manifestFile,
+            error: String(error),
+          });
+        }
+        continue;
+      }
+      try {
+        const manifest = parseManifest(saved);
+        listing.push({
+          root,
+          projectName: manifest.projectName,
+          repoRoot: manifest.repoRoot,
+          mainSessionFile: manifest.mainSessionFile,
+          modifiedAt: await newestMtime([manifest.mainSessionFile, manifestFile]),
+        });
+      } catch (error) {
+        logger.warn("Skipping invalid project manifest", {
+          file: manifestFile,
+          error: String(error),
+        });
+      }
+    }
+  }
+  return listing.sort((a, b) => b.modifiedAt - a.modifiedAt);
 }
 
 /** A process lease plus the minimum persisted project/session bindings. */

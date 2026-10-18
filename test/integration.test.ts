@@ -10,11 +10,11 @@ import { createAgentSession, type CreateAgentSessionResult } from "@oh-my-pi/pi-
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { AgentRegistry } from "@oh-my-pi/pi-coding-agent/registry/agent-registry";
 import * as vcs from "@oh-my-pi/pi-natives/vcs";
-import { ProjectStore } from "../src/project";
-import { OwnerCoordinator } from "../src/owners";
-import { projectExtension } from "../src/extension";
-import { MAIN_TOOLS } from "../src/main";
-import { validateSessionWorkspace } from "../src/sessions";
+import { ProjectStore } from "../src/runtime/project";
+import { OwnerCoordinator } from "../src/runtime/owners";
+import { projectExtension } from "../src/runtime/extension";
+import { MAIN_TOOLS } from "../src/runtime/main-session";
+import { validateSessionWorkspace } from "../src/runtime/sessions";
 
 function call(name: string, argumentsValue: Record<string, unknown>): MockContent {
   return { type: "toolCall", name, arguments: argumentsValue };
@@ -217,6 +217,22 @@ describe("SDK owner coordination", () => {
       const originalMainFile = main.session.sessionManager.getSessionFile();
       expect(await main.session.newSession()).toBe(false);
       expect(main.session.sessionManager.getSessionFile()).toBe(originalMainFile);
+      // Session-leaving slash commands are consumed by the extension with an
+      // explanation, before any native picker can open and trap the user.
+      const resumeAttempt = await main.session.extensionRunner?.emitInput(
+        "/resume",
+        undefined,
+        "rpc",
+      );
+      expect(resumeAttempt?.handled).toBe(true);
+      const freshAttempt = await main.session.extensionRunner?.emitInput("/new", undefined, "rpc");
+      expect(freshAttempt?.handled).toBe(true);
+      const ordinaryAttempt = await main.session.extensionRunner?.emitInput(
+        "/model",
+        undefined,
+        "rpc",
+      );
+      expect(ordinaryAttempt?.handled).not.toBe(true);
       for (const id of ["owner-a", "owner-b"]) {
         await Bun.write(path.join(store.paths.shared, id, "requirement.md"), `Implement ${id}`);
       }
@@ -313,7 +329,10 @@ describe("SDK owner coordination", () => {
       const requestsBeforeResume = mock.calls.length;
       await coordinator.restore();
       expect(mock.calls.length).toBe(requestsBeforeResume);
-			expect(store.manifest?.owners.map((owner) => owner.id).sort()).toEqual(["owner-a", "owner-b"]);
+      expect(store.manifest?.owners.map((owner) => owner.id).sort()).toEqual([
+        "owner-a",
+        "owner-b",
+      ]);
       for (const binding of store.manifest!.owners) {
         const owner = AgentRegistry.global().get(binding.id)!;
         expect(owner.status).toBe("idle");

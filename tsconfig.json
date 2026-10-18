@@ -12,5 +12,5 @@
     "resolveJsonModule": true,
     "types": ["bun"]
   },
-  "include": ["src", "test", "../research/oh-my-pi/types/assets"]
+  "include": ["src", "test", "scripts", "examples", "types"]
 }

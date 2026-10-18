@@ -3,14 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "bin": {
-    "project-harness": "./src/main.ts"
+    "project": "./src/main.ts"
   },
   "type": "module",
   "scripts": {
     "dev": "bun src/main.ts",
     "check": "tsgo --noEmit",
+    "verify:omp": "bun scripts/verify-omp.ts",
+    "build:omp-native": "bun scripts/record-native.ts",
     "test": "bun test",
-    "test:integration": "bun test test/integration.test.ts"
+    "test:integration": "bun test test/integration.test.ts test/runtime.test.ts test/runtime-input.test.ts",
+    "example:runtime": "bun examples/runtime.ts"
   },
   "dependencies": {
     "@oh-my-pi/pi-coding-agent": "link:@oh-my-pi/pi-coding-agent",
