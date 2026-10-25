@@ -88,6 +88,12 @@ export interface RuntimeEvent {
   payload: unknown;
 }
 
+export interface SessionModelInfo {
+  id: string;
+  name: string;
+  provider: string;
+}
+
 export interface SessionSnapshot {
   sessionId: string;
   ownerId?: string;
@@ -97,6 +103,7 @@ export interface SessionSnapshot {
   activeAssistantMessage?: unknown;
   activeTools: ActiveToolSnapshot[];
   entryCount: number;
+  model?: SessionModelInfo;
   error?: string;
 }
 

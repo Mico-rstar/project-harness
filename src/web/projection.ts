@@ -155,7 +155,7 @@ export function projectMessage(value: unknown, id = "stream", timestamp = ""): W
   return { id, timestamp, role, blocks: content };
 }
 
-export function projectEntry(entry: SessionEntry): WebEntry {
+export function projectEntry(entry: SessionEntry): WebEntry | null {
   if (entry.type === "message") {
     return (
       projectMessage(entry.message, entry.id, entry.timestamp) ?? {
@@ -183,11 +183,18 @@ export function projectEntry(entry: SessionEntry): WebEntry {
       blocks: [{ type: "notice", text: "项目会话已就绪" }],
     };
   }
+  // Agent-to-agent IRC deliveries are protocol traffic aimed at the model;
+  // the cooperation feed is the user-facing view of the same content.
+  if (entry.type === "custom_message" && data?.customType === "irc:incoming") return null;
+  const label = labels[entry.type];
+  const content = blocks(data?.content);
+  // Unrecognized entry types only earn a divider when they carry content.
+  if (!label && content.length === 0) return null;
   return {
     id: entry.id,
     timestamp: entry.timestamp,
     role: "system",
-    blocks: [{ type: "notice", text: labels[entry.type] ?? "会话记录" }, ...blocks(data?.content)],
+    blocks: [{ type: "notice", text: label ?? "会话记录" }, ...content],
   };
 }
 
@@ -209,6 +216,7 @@ export function projectSession(session: SessionSnapshot): WebSession {
     isStreaming: session.isStreaming,
     stream: projectMessage(session.activeAssistantMessage),
     activeTools: session.activeTools.map(projectTool),
+    ...(session.model ? { model: session.model } : {}),
     error: session.error,
   };
 }
@@ -259,7 +267,9 @@ export function projectHistory(page: SessionPage): WebHistory {
   return {
     sessionId: page.sessionId,
     ownerId: page.ownerId,
-    entries: page.entries.map(projectEntry),
+    entries: page.entries
+      .map(projectEntry)
+      .filter((entry): entry is WebEntry => entry !== null),
     nextBeforeEntryId: page.nextBeforeEntryId,
     stream: projectMessage(page.stream),
     activeTools: page.activeTools.map(projectTool),
@@ -273,13 +283,12 @@ export function projectHistory(page: SessionPage): WebHistory {
 export function projectEvent(event: RuntimeEvent, snapshot: RuntimeSnapshot): WebEvent {
   const base = { epoch: event.epoch, seq: event.seq };
   if (event.type === "session_entry" && event.sessionId) {
+    const entry = projectEntry(event.payload as SessionEntry);
     return {
       ...base,
-      patch: {
-        kind: "entry",
-        sessionId: event.sessionId,
-        entry: projectEntry(event.payload as SessionEntry),
-      },
+      patch: entry
+        ? { kind: "entry", sessionId: event.sessionId, entry }
+        : { kind: "noop" },
     };
   }
   if (event.type === "session_event" && event.sessionId) {

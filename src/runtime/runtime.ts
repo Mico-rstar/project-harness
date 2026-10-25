@@ -180,6 +180,15 @@ export async function startMainSession(
         : { activeAssistantMessage: structuredClone(item.activeAssistantMessage) }),
       activeTools: structuredClone([...item.activeExecutions.values()]),
       entryCount: item.manager.getEntries().length,
+      ...(item.session.model
+        ? {
+            model: {
+              id: item.session.model.id,
+              name: item.session.model.name,
+              provider: item.session.model.provider,
+            },
+          }
+        : {}),
       ...(item.error ? { error: item.error } : {}),
     }));
   const snapshot = (): RuntimeSnapshot => {

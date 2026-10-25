@@ -81,6 +81,11 @@ export interface WebEntry {
   blocks: WebBlock[];
   toolCallId?: string;
 }
+export interface WebSessionModel {
+  id: string;
+  name: string;
+  provider: string;
+}
 export interface WebSession {
   sessionId: string;
   ownerId?: string;
@@ -89,6 +94,7 @@ export interface WebSession {
   isStreaming: boolean;
   stream: WebEntry | null;
   activeTools: WebTool[];
+  model?: WebSessionModel;
   error?: string;
 }
 export interface WebHistory {
