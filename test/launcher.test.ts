@@ -3,6 +3,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as vcs from "@oh-my-pi/pi-natives/vcs";
+import { resolveLaunchOptions as resolveSharedLaunchOptions } from "../src/launch";
 import { listProjects, ProjectStore } from "../src/runtime/project";
 import {
   resolveLaunchOptions,
@@ -201,7 +202,7 @@ describe("launch option resolution", () => {
     }
 
     const picked = chooserPicking("beta");
-    const options = await resolveLaunchOptions(
+    const options = await resolveSharedLaunchOptions(
       { resume: false },
       f.repo,
       f.dataHome,
@@ -245,6 +246,48 @@ describe("launch option resolution", () => {
     expect(options.project).toBe("brand-new-app");
     expect(options.bootstrap).toEqual({ initialized: true, committed: true });
     expect(await vcs.requireGit(empty).headSha()).toBeTruthy();
+  });
+
+  test("shared launch resolution asks its host for a name when the directory has no slug", async () => {
+    const root = await temporary();
+    const directory = path.join(root, "東京");
+    await fs.mkdir(directory);
+    let promptedFor = "";
+    const options = await resolveSharedLaunchOptions(
+      { resume: false },
+      directory,
+      path.join(root, "data"),
+      async () => null,
+      async (repoRoot) => {
+        promptedFor = repoRoot;
+        return "web-project";
+      },
+    );
+    expect(promptedFor).toBe(directory);
+    expect(options.project).toBe("web-project");
+  });
+
+  test("shared launch resolution lets a noninteractive host reject implicit project selection", async () => {
+    const f = await gitFixture();
+    for (const name of ["demo", "beta"]) {
+      const store = await ProjectStore.open({ ...f, project: name, resume: false });
+      stores.push(store);
+      const session = path.join(store.paths.sessions, "main.jsonl");
+      await Bun.write(session, '{"type":"session"}\n');
+      await store.initialize(session);
+      store.release();
+    }
+    await expect(
+      resolveSharedLaunchOptions(
+        { resume: false },
+        f.repo,
+        f.dataHome,
+        async () => {
+          throw new Error("pass --project <slug> when using --web");
+        },
+        async () => "unused",
+      ),
+    ).rejects.toThrow("pass --project <slug> when using --web");
   });
 
   test("an explicit --repo adopts a populated non-git directory", async () => {

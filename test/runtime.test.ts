@@ -18,6 +18,9 @@ function call(name: string, argumentsValue: Record<string, unknown>): MockConten
 
 describe("production harness runtime", () => {
   test("runs two owners and nested task sessions, and restores histories without prompting", async () => {
+    const agentRegistry = AgentRegistry.global();
+    const initialAgentIds = new Set(agentRegistry.list().map((ref) => ref.id));
+    const childIds: string[] = [];
     const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "harness-runtime-")));
     const repoPath = path.join(root, "repo");
     await fs.mkdir(path.join(repoPath, ".git", "objects"), { recursive: true });
@@ -167,7 +170,6 @@ describe("production harness runtime", () => {
             .some((ref) => ref.parentId === id),
         ),
       );
-      const childIds: string[] = [];
       const childSessionIds = new Map<string, string>();
       for (const id of ["owner-one", "owner-two"]) {
         const ownerSession = runtime.snapshot().sessions.find((session) => session.ownerId === id);
@@ -267,6 +269,9 @@ describe("production harness runtime", () => {
       }
     } finally {
       await runtime?.close();
+      for (const ref of agentRegistry.list()) {
+        if (!initialAgentIds.has(ref.id)) agentRegistry.unregister(ref.id);
+      }
       registry.unregisterProvider("runtime-test");
       await auth.close();
       await fs.rm(root, { recursive: true, force: true });

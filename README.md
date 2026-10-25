@@ -81,7 +81,7 @@ fork 分支、官方同步、双仓验证和回退步骤见 [维护指南](docs/
 
 执行 `bun run example:runtime` 可运行有限生命周期、确定性模型的嵌入示例。API 类型见 `src/runtime/contracts.ts`。
 
-源码按职责组织：`src/runtime/` 包含核心会话、协作、项目持久化与静态提示词；`src/tui/` 包含终端交互和启动选择器；`src/main.ts` 为 CLI 入口。本版本不包含 Web 服务、页面或 Markdown 业务状态解析。
+源码按职责组织：`src/runtime/` 包含核心会话、协作、项目持久化与静态提示词；`src/tui/` 包含终端交互和启动选择器；`src/web/` 包含本机浏览器工作台和 HTTP 同步层；`src/main.ts` 为 CLI 入口。
 
 ## 启动与恢复
 
@@ -107,6 +107,25 @@ project --repo /absolute/path/to/repo --project my-project --resume
 ```
 
 也可以在本目录执行 `bun link` 注册 CLI（bin 名为 `project`），或用 `bun run dev` 加同样的参数。确保 `~/.bun/bin` 在 PATH 中。
+
+### 本机 Web 工作台
+
+使用 `--web` 在本机启动浏览器界面，默认绑定 `127.0.0.1:4173`：
+
+```sh
+project --web
+project --web --port 0                 # 由系统分配可用端口
+project --web --repo /path/to/repo --project demo
+bun run dev:web -- --repo /path/to/repo --project demo
+```
+
+启动后终端会打印实际访问地址。`--port` 仅能与 `--web` 一起使用。Web 模式不会打开终端选择器：同一仓库存在多个 harness 项目，或目录名无法生成有效 slug 时，请显式传入 `--project`。恢复与默认项目发现规则和 TUI 相同。关闭进程会停止本机 HTTP 服务、结束 runtime 并释放项目锁；关闭浏览器标签不会结束服务或 runtime。
+
+界面使用深色配色，左侧导航选择 Main、owner 任务或全局协作；中央区域显示会话和消息，右侧面板查看运行活动与待响应请求。输入始终发给 Main。标题栏菜单可切换输入行为：`followUp` 将消息排到当前轮次之后，`steer` 用于引导正在进行的轮次。输入区只有一个主按钮：有草稿时发送消息；草稿为空且 Main 正在运行时用于停止 Main 当前轮次。停止也可从标题栏菜单选择。
+
+连接中断时写操作会暂时禁用；连接恢复后，页面会从 runtime 获取新快照并重新同步当前会话和待响应请求。恢复期间不会自动重发尚未确认的输入；页面会查询原输入回执，用户可在确认结果后重试。
+
+工作台展示 Main、owner、子代理会话与 IRC 的实际运行活动。空闲或某个工具调用结束不代表需求完成；Main 仍负责评估进展并与用户讨论。首版输入发送给 Main，不提供直接向 owner/IRC 发消息、图片输入或共享资料浏览。
 
 项目名和 owner ID 使用 1–64 字符的小写字母、数字和单连字符 slug；owner ID `main` 为保留身份。`--repo` 可以指向主仓库内的子目录或该仓库的 linked worktree，数据绑定到规范化后的主仓库根路径。
 
