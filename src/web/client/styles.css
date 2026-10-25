@@ -1093,6 +1093,11 @@ kbd {
   font-size: 8px;
   text-align: center;
 }
+.composer-model {
+  color: #9a9a9a;
+  font-size: 11px;
+  white-space: nowrap;
+}
 .receipt-status,
 .request-inline-summary {
   display: flex;
@@ -1352,6 +1357,19 @@ kbd {
 }
 .agent-running i {
   background: #8db78e;
+}
+.agent-sub {
+  opacity: 0.82;
+}
+.agent-sub .avatar {
+  width: 19px;
+  height: 19px;
+  flex-basis: 19px;
+  border-radius: 5px;
+  font-size: 8px;
+}
+.agent-sub .agent-copy strong {
+  color: #9a9a9a;
 }
 .context-empty {
   color: #666;
@@ -1655,6 +1673,114 @@ kbd {
   color: #777;
   font-size: 9px;
 }
+.work-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid #323232;
+  border-radius: 6px;
+  color: #aaa;
+  background: #1a1a1a;
+  text-align: left;
+  font-family: "DM Mono", monospace;
+  font-size: 9px;
+  cursor: pointer;
+}
+.work-header:hover {
+  background: #222;
+  color: #ddd;
+}
+.work-error .work-header {
+  border-color: #453032;
+  color: #d99595;
+}
+.work-running .work-header {
+  position: relative;
+  overflow: hidden;
+  border-color: #423a55;
+}
+.work-running .work-header::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 25%,
+    rgba(154, 134, 200, 0.08) 42%,
+    rgba(178, 160, 226, 0.2) 50%,
+    rgba(154, 134, 200, 0.08) 58%,
+    transparent 75%
+  );
+  transform: translateX(-100%);
+  animation: work-shimmer 2.2s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes work-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+.work-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.work-detail {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid #323232;
+  border-radius: 6px;
+  background: #191919;
+}
+.work-dots {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+}
+.work-live {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 7px;
+  padding: 0 2px;
+  color: #8a7fae;
+  font-family: "DM Mono", monospace;
+  font-size: 9px;
+}
+.work-live-action {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.work-dots i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #9a86c8;
+  animation: work-dot 1.2s infinite ease-in-out;
+}
+.work-dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.work-dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes work-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
 
 .cooperation-feed {
   flex: 1;
@@ -1702,56 +1828,70 @@ kbd {
   background: #242018;
   font-size: 9px;
 }
-.collaboration-message {
-  margin: 0 0 12px;
-  padding: 13px;
-  border: 1px solid #323232;
-  border-radius: 7px;
-  background: #191919;
+.collab-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 18px;
+  max-width: 900px;
+}
+.collab-row .avatar {
+  margin-top: 2px;
+  width: 30px;
+  height: 30px;
+  flex-basis: 30px;
+  border-radius: 8px;
+  font-size: 11px;
+}
+.collab-content {
+  min-width: 0;
+  max-width: min(82%, 760px);
 }
 .collab-meta {
   display: flex;
   align-items: center;
-  gap: 7px;
-  color: #929292;
-  font-size: 9px;
-}
-.collab-meta .avatar {
-  width: 20px;
-  height: 20px;
-  flex-basis: 20px;
-  border-radius: 6px;
-  font-size: 8px;
+  gap: 8px;
+  margin-bottom: 4px;
+  color: #777;
+  font-size: 11px;
 }
 .collab-meta button {
   border: 0;
   padding: 0;
-  color: #c7c7c7;
   background: transparent;
   cursor: pointer;
-  font-size: 9px;
+  font-size: 11px;
 }
-.collab-arrow {
-  color: #666;
+.collab-from {
+  color: #c5c5c5;
+  font-weight: 600;
+}
+.collab-mention,
+.collab-to {
+  color: #b8a6db;
 }
 .collab-meta time {
-  margin-left: auto;
   color: #666;
   font-size: 8px;
 }
-.collab-body {
-  padding: 10px 0 5px;
+.collab-bubble {
+  border: 1px solid #353535;
+  border-radius: 3px 10px 10px 10px;
+  padding: 9px 13px;
+  background: #252525;
   color: #c7c7c7;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.7;
+  overflow-wrap: anywhere;
 }
 .delivery-state {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 7px;
+  margin-top: 4px;
   color: #777;
   font-size: 8px;
+  opacity: 0.8;
 }
 .delivery-state > span {
   width: 5px;

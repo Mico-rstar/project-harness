@@ -6,10 +6,17 @@ import {
   useSyncExternalStore,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
+  type RefObject,
 } from "react";
 import { createRoot } from "react-dom/client";
 import { createWebStore, type WebClientState, type WebStore } from "./store";
-import type { WebAgent, WebCooperationMessage, WebEntry, WebOwner } from "../contracts";
+import type {
+  WebAgent,
+  WebBlock,
+  WebCooperationMessage,
+  WebEntry,
+  WebOwner,
+} from "../contracts";
 import {
   Avatar,
   EntryBlocks,
@@ -18,7 +25,9 @@ import {
   Markdown,
   RequestCard,
   ToolCard,
+  WorkGroup,
 } from "./components";
+import { agentDepth, groupMembers, groupTranscript } from "./groups";
 import "./styles.css";
 
 type View =
@@ -88,17 +97,6 @@ function ownerForAgent(
   return undefined;
 }
 
-function isDescendantAgent(agent: WebAgent, ancestorId: string, agents: WebAgent[]): boolean {
-  let parentId = agent.parentId;
-  const seen = new Set<string>();
-  while (parentId && !seen.has(parentId)) {
-    if (parentId === ancestorId) return true;
-    seen.add(parentId);
-    parentId = agents.find((item) => item.id === parentId)?.parentId;
-  }
-  return false;
-}
-
 export default function App({ store: providedStore }: { store?: WebStore }) {
   const store = useMemo(() => providedStore ?? createWebStore(), [providedStore]);
   const state = useStore(store);
@@ -110,8 +108,24 @@ export default function App({ store: providedStore }: { store?: WebStore }) {
   const [mobileDrawer, setMobileDrawer] = useState(false);
   const [contextDrawer, setContextDrawer] = useState(false);
   const [freshCount, setFreshCount] = useState(0);
+  const freshCountRef = useRef(0);
+  // Dispatch setFreshCount(0) only when the count would actually change: under
+  // sustained streaming there is almost always pending work on this fiber, so
+  // a redundant same-value dispatch never bails out and pushes React over its
+  // nested-update limit ("Maximum update depth exceeded").
+  const clearFresh = () => {
+    if (freshCountRef.current !== 0) {
+      freshCountRef.current = 0;
+      setFreshCount(0);
+    }
+  };
+  const addFresh = (added: number) => {
+    freshCountRef.current += added;
+    setFreshCount((value) => value + added);
+  };
   const [cooperationOwner, setCooperationOwner] = useState<string | undefined>();
   const transcriptRef = useRef<HTMLDivElement>(null);
+  const feedRef = useRef<HTMLDivElement>(null);
   const pendingRef = useRef<HTMLElement>(null);
   const sendLock = useRef(false);
   const nearBottom = useRef(true);
@@ -133,11 +147,15 @@ export default function App({ store: providedStore }: { store?: WebStore }) {
   const focusedOwnerId =
     selectedOwner?.id ??
     (view.kind === "agent" ? ownerForAgent(view.agent, agents, owners)?.id : undefined);
-  const focusedAgents = focusedOwnerId
-    ? agents.filter(
-        (agent) => agent.id === focusedOwnerId || isDescendantAgent(agent, focusedOwnerId, agents),
-      )
-    : agents;
+  const ownerGroups = useMemo(() => groupMembers(agents, owners), [agents, owners]);
+  const focusedGroup = focusedOwnerId
+    ? ownerGroups.find((group) => group.owner?.id === focusedOwnerId)
+    : undefined;
+  const mainAgent = agents.find(
+    (agent) =>
+      agent.kind === "main" ||
+      (state.snapshot?.mainSessionId ? agent.id === state.snapshot.mainSessionId : false),
+  );
   const activeHistoryState = state.histories[activeSessionId];
   const history = activeHistoryState?.data;
   const entries = history?.entries ?? [];
@@ -178,15 +196,25 @@ export default function App({ store: providedStore }: { store?: WebStore }) {
     void store.loadCooperation(cooperationOwner);
   }, [cooperationOwner, store]);
 
+  // Switching views always lands on the latest content: reset stickiness and
+  // jump to the bottom; late-arriving history re-pins via the effect below.
+  useEffect(() => {
+    nearBottom.current = true;
+    clearFresh();
+    for (const element of [transcriptRef.current, feedRef.current]) {
+      element?.scrollTo({ top: element.scrollHeight });
+    }
+  }, [activeSessionId, view]);
+
   useEffect(() => {
     const element = transcriptRef.current;
     if (!element) return;
     const count = entries.length + (stream ? 1 : 0);
     if (nearBottom.current) {
       element.scrollTop = element.scrollHeight;
-      setFreshCount(0);
+      clearFresh();
     } else if (count > previousEntryCount.current) {
-      setFreshCount((value) => value + count - previousEntryCount.current);
+      addFresh(count - previousEntryCount.current);
     }
     previousEntryCount.current = count;
   }, [entries.length, stream?.id, stream?.blocks, activeSessionId]);
@@ -194,7 +222,7 @@ export default function App({ store: providedStore }: { store?: WebStore }) {
   const changeView = (next: View) => {
     setView(next);
     setMobileDrawer(false);
-    setFreshCount(0);
+    clearFresh();
   };
 
   const returnFromAgent = (agentView: Extract<View, { kind: "agent" }>) => {
@@ -223,7 +251,7 @@ export default function App({ store: providedStore }: { store?: WebStore }) {
     if (element) {
       element.scrollTo({ top: element.scrollHeight, behavior: "smooth" });
       nearBottom.current = true;
-      setFreshCount(0);
+      clearFresh();
     }
   };
 
@@ -295,10 +323,14 @@ export default function App({ store: providedStore }: { store?: WebStore }) {
         : view.kind === "owner"
           ? view.owner.title
           : view.agent.displayName;
-  const visibleEntries = [
-    ...entries,
-    ...(stream && !entries.some((entry) => entry.id === stream.id) ? [stream] : []),
-  ];
+  const transcriptGroups = useMemo(
+    () =>
+      groupTranscript(
+        [...entries, ...(stream && !entries.some((entry) => entry.id === stream.id) ? [stream] : [])],
+        { liveTools, streamId: stream?.id },
+      ),
+    [entries, stream, liveTools],
+  );
 
   return (
     <div
@@ -652,6 +684,7 @@ export default function App({ store: providedStore }: { store?: WebStore }) {
             <CooperationFeed
               messages={cooperation}
               state={state}
+              scrollRef={feedRef}
               onOpenOwner={(owner) => changeView({ kind: "owner", owner, tab: "session" })}
               onLoadMore={() =>
                 void store.loadCooperation(
@@ -670,7 +703,7 @@ export default function App({ store: providedStore }: { store?: WebStore }) {
                 const element = event.currentTarget;
                 nearBottom.current =
                   element.scrollHeight - element.scrollTop - element.clientHeight < 120;
-                if (nearBottom.current) setFreshCount(0);
+                if (nearBottom.current) clearFresh();
                 if (
                   element.scrollTop < 80 &&
                   history?.nextBeforeEntryId &&
@@ -747,19 +780,28 @@ export default function App({ store: providedStore }: { store?: WebStore }) {
                   {activeHistoryState?.loading ? "正在加载…" : "加载更早的消息"}
                 </button>
               )}
-              {visibleEntries.map((entry) => (
-                <Message
-                  key={entry.id}
-                  entry={entry}
-                  sessionLabel={sessionLabel(state, activeSessionId)}
-                  isStream={entry === stream}
-                  onAgent={(agent) =>
-                    changeView({ kind: "agent", agent, returnSessionId: activeSessionId })
-                  }
-                  agents={agents}
-                  userLabel={view.kind === "owner" ? "任务输入" : "你"}
-                />
-              ))}
+              {transcriptGroups.map((group) =>
+                group.kind === "message" ? (
+                  <Message
+                    key={group.id}
+                    entry={group.entry}
+                    blocks={group.blocks}
+                    sessionLabel={sessionLabel(state, activeSessionId)}
+                    isStream={group.entry === stream}
+                    onAgent={(agent) =>
+                      changeView({ kind: "agent", agent, returnSessionId: activeSessionId })
+                    }
+                    agents={agents}
+                    userLabel={view.kind === "owner" ? "任务输入" : "你"}
+                  />
+                ) : (
+                  <WorkGroup
+                    key={group.id}
+                    group={group}
+                    label={sessionLabel(state, activeSessionId)}
+                  />
+                ),
+              )}
               {liveTools.length > 0 && (
                 <div className="live-tools">
                   {liveTools.map((tool) => (
@@ -839,6 +881,11 @@ export default function App({ store: providedStore }: { store?: WebStore }) {
                 <div className="composer-controls">
                   {state.inputBehavior === "steer" && (
                     <span className="mode-indicator">引导模式</span>
+                  )}
+                  {(activeSession?.model ?? mainSession?.model) && (
+                    <span className="composer-model">
+                      {(activeSession?.model ?? mainSession?.model)?.name}
+                    </span>
                   )}
                   <button
                     className={`send-button${!state.draft.trim() && mainRunning ? " stop-button" : ""}`}
@@ -1004,55 +1051,59 @@ export default function App({ store: providedStore }: { store?: WebStore }) {
               <div className="context-section-heading">
                 <span>协作成员</span>
                 <span className="section-count">
-                  {focusedOwnerId ? focusedAgents.length : agents.length || owners.length}
+                  {focusedOwnerId ? (focusedGroup?.children.length ?? 0) : owners.length}
                 </span>
               </div>
-              {focusedAgents.length > 0 ? (
+              {focusedOwnerId && focusedGroup ? (
                 <div className="agent-list">
-                  {focusedAgents.map((agent) => (
-                    <button
+                  {focusedGroup.owner && (
+                    <OwnerRow
+                      owner={focusedGroup.owner}
+                      onOpen={(next) => changeView(next)}
+                    />
+                  )}
+                  {focusedGroup.children.map((agent) => (
+                    <SubagentRow
                       key={agent.id}
-                      className="agent-row"
-                      onClick={() =>
-                        changeView({ kind: "agent", agent, returnSessionId: activeSessionId })
+                      agent={agent}
+                      depth={Math.max(
+                        0,
+                        agentDepth(agent, agents) -
+                          (focusedGroup.root ? agentDepth(focusedGroup.root, agents) + 1 : 1),
+                      )}
+                      onOpen={(next) =>
+                        changeView({ kind: "agent", agent: next, returnSessionId: activeSessionId })
                       }
-                    >
-                      <Avatar
-                        label={agent.displayName}
-                        tone={agent.kind === "owner" ? "owner" : "agent"}
-                      />
-                      <span className="agent-copy">
-                        <strong>{agent.displayName}</strong>
-                        <small>{agent.activity || agent.kind}</small>
-                      </span>
-                      <span
-                        className={`agent-status${agent.status.toLowerCase().includes("run") || agent.status.toLowerCase().includes("active") ? " agent-running" : ""}`}
-                      >
-                        <i />
-                        {agent.status}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              ) : owners.length > 0 ? (
-                <div className="agent-list">
-                  {owners.map((owner) => (
-                    <button
-                      key={owner.id}
-                      className="agent-row"
-                      onClick={() => changeView({ kind: "owner", owner, tab: "session" })}
-                    >
-                      <Avatar label={owner.title} tone="owner" />
-                      <span className="agent-copy">
-                        <strong>{owner.title}</strong>
-                        <small>{owner.branch || "Owner"}</small>
-                      </span>
-                      <Icon name="chevron" size={14} />
-                    </button>
+                    />
                   ))}
                 </div>
               ) : (
-                <div className="context-empty">协作成员会显示在这里</div>
+                <div className="agent-list">
+                  {mainAgent && (
+                    <button
+                      className="agent-row"
+                      onClick={() => changeView({ kind: "main" })}
+                    >
+                      <Avatar label={mainAgent.displayName} tone="agent" />
+                      <span className="agent-copy">
+                        <strong>{mainAgent.displayName}</strong>
+                        <small>项目主会话</small>
+                      </span>
+                      <span
+                        className={`agent-status${mainAgent.status.toLowerCase().includes("run") || mainAgent.status.toLowerCase().includes("active") ? " agent-running" : ""}`}
+                      >
+                        <i />
+                        {mainAgent.status}
+                      </span>
+                    </button>
+                  )}
+                  {owners.map((owner) => (
+                    <OwnerRow key={owner.id} owner={owner} onOpen={(next) => changeView(next)} />
+                  ))}
+                  {!mainAgent && owners.length === 0 && (
+                    <div className="context-empty">协作成员会显示在这里</div>
+                  )}
+                </div>
               )}
             </section>
 
@@ -1127,8 +1178,52 @@ export default function App({ store: providedStore }: { store?: WebStore }) {
   );
 }
 
+function OwnerRow({ owner, onOpen }: { owner: WebOwner; onOpen: (view: View) => void }) {
+  return (
+    <button className="agent-row" onClick={() => onOpen({ kind: "owner", owner, tab: "session" })}>
+      <Avatar label={owner.title} tone="owner" />
+      <span className="agent-copy">
+        <strong>{owner.title}</strong>
+        <small>{owner.branch || "Owner"}</small>
+      </span>
+      <Icon name="chevron" size={14} />
+    </button>
+  );
+}
+
+function SubagentRow({
+  agent,
+  depth,
+  onOpen,
+}: {
+  agent: WebAgent;
+  depth: number;
+  onOpen: (agent: WebAgent) => void;
+}) {
+  return (
+    <button
+      className="agent-row agent-sub"
+      style={{ paddingLeft: `${10 + depth * 14}px` }}
+      onClick={() => onOpen(agent)}
+    >
+      <Avatar label={agent.displayName} tone="agent" />
+      <span className="agent-copy">
+        <strong>{agent.displayName}</strong>
+        <small>{agent.activity || agent.kind}</small>
+      </span>
+      <span
+        className={`agent-status${agent.status.toLowerCase().includes("run") || agent.status.toLowerCase().includes("active") ? " agent-running" : ""}`}
+      >
+        <i />
+        {agent.status}
+      </span>
+    </button>
+  );
+}
+
 function Message({
   entry,
+  blocks,
   sessionLabel: label,
   isStream,
   agents,
@@ -1136,6 +1231,7 @@ function Message({
   userLabel = "你",
 }: {
   entry: WebEntry;
+  blocks?: WebBlock[];
   sessionLabel: string;
   isStream: boolean;
   agents: WebAgent[];
@@ -1183,7 +1279,7 @@ function Message({
         <div
           className={`message-bubble${isUser ? " user-bubble" : ""}${isTool ? " tool-bubble" : ""}`}
         >
-          <EntryBlocks entry={entry} />
+          <EntryBlocks entry={entry} blocks={blocks} />
         </div>
         {isUser && (
           <div className="message-meta user-meta">
@@ -1199,6 +1295,7 @@ function Message({
 function CooperationFeed({
   messages,
   state,
+  scrollRef,
   onOpenOwner,
   onLoadMore,
   loading,
@@ -1206,6 +1303,7 @@ function CooperationFeed({
 }: {
   messages: WebCooperationMessage[];
   state: WebClientState;
+  scrollRef?: RefObject<HTMLDivElement | null>;
   onOpenOwner: (owner: WebOwner) => void;
   onLoadMore: () => void;
   loading: boolean;
@@ -1213,8 +1311,12 @@ function CooperationFeed({
 }) {
   const owners = state.snapshot?.owners ?? [];
   const label = (id: string) => owners.find((owner) => owner.id === id)?.title ?? id;
+  const openOwner = (id: string) => {
+    const owner = owners.find((item) => item.id === id);
+    if (owner) onOpenOwner(owner);
+  };
   return (
-    <div className="cooperation-feed">
+    <div className="cooperation-feed" ref={scrollRef}>
       <div className="feed-intro">
         <div className="feed-icon">
           <Icon name="users" size={19} />
@@ -1243,29 +1345,38 @@ function CooperationFeed({
       )}
       {messages.length ? (
         messages.map((message) => (
-          <article className="collaboration-message" key={message.id}>
-            <div className="collab-meta">
-              <Avatar label={label(message.from)} tone="owner" />
-              <button
-                onClick={() => {
-                  const owner = owners.find((item) => item.id === message.from);
-                  if (owner) onOpenOwner(owner);
-                }}
-              >
-                {label(message.from)}
-              </button>
-              <span className="collab-arrow">→</span>
-              <span>{message.to === "*" ? "全体" : label(message.to)}</span>
-              <time>{formatTime(message.ts)}</time>
-            </div>
-            <div className="collab-body">
-              <Markdown>{message.body}</Markdown>
-            </div>
-            <div className={`delivery-state delivery-${message.delivery.outcome.toLowerCase()}`}>
-              <span />
-              {message.delivery.outcome}
-              {message.delivery.buffered ? " · 已缓冲" : ""}
-              {message.delivery.error ? ` · ${message.delivery.error}` : ""}
+          <article className="collab-row" key={message.id}>
+            <Avatar label={label(message.from)} tone="owner" />
+            <div className="collab-content">
+              <div className="collab-meta">
+                <button
+                  className="collab-from"
+                  onClick={() => openOwner(message.from)}
+                >
+                  {label(message.from)}
+                </button>
+                {message.to === "*" ? (
+                  <span className="collab-to">全体</span>
+                ) : (
+                  <button className="collab-mention" onClick={() => openOwner(message.to)}>
+                    @{label(message.to)}
+                  </button>
+                )}
+                <time>{formatTime(message.ts)}</time>
+              </div>
+              <div className="collab-bubble">
+                <Markdown>{message.body}</Markdown>
+              </div>
+              {message.delivery.outcome.toLowerCase() !== "injected" && (
+                <div
+                  className={`delivery-state delivery-${message.delivery.outcome.toLowerCase()}`}
+                >
+                  <span />
+                  {message.delivery.outcome}
+                  {message.delivery.buffered ? " · 已缓冲" : ""}
+                  {message.delivery.error ? ` · ${message.delivery.error}` : ""}
+                </div>
+              )}
             </div>
           </article>
         ))

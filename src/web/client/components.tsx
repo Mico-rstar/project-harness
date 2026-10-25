@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import type { WebBlock, WebEntry, WebTool, WebUIRequest, WebUIResponse } from "../contracts";
+import { workSummary, runningAction, type WorkGroup as TranscriptWorkGroup } from "./groups";
 
 export type IconName =
   | "search"
@@ -214,10 +215,11 @@ export function ToolCard({ tool, compact = false }: { tool: WebTool; compact?: b
   );
 }
 
-export function EntryBlocks({ entry }: { entry: WebEntry }) {
+export function EntryBlocks({ entry, blocks }: { entry: WebEntry; blocks?: WebBlock[] }) {
+  const rendered = blocks ?? entry.blocks;
   return (
     <div className="entry-blocks">
-      {entry.blocks.map((block, index) => (
+      {rendered.map((block, index) => (
         <Block key={`${entry.id}-${index}`} block={block} />
       ))}
     </div>
@@ -235,6 +237,60 @@ function Block({ block }: { block: WebBlock }) {
     );
   if (block.type === "notice") return <div className="notice-block">{block.text}</div>;
   return <Markdown>{block.text}</Markdown>;
+}
+
+export function WorkGroup({ group, label }: { group: TranscriptWorkGroup; label: string }) {
+  const [open, setOpen] = useState(false);
+  const action = group.running ? runningAction(group) : null;
+  return (
+    <article
+      className={`message-row work-row${group.running ? " work-running" : ""}${group.hasError ? " work-error" : ""}`}
+    >
+      <Avatar label={label} tone="agent" />
+      <div className="message-body">
+        <button
+          className="work-header"
+          onClick={() => setOpen((value) => !value)}
+          aria-expanded={open}
+        >
+          <Icon name="terminal" size={14} />
+          <span className="work-summary">{workSummary(group)}</span>
+          {group.hasError && <span className="tool-error-label">失败</span>}
+          <span className="tool-toggle">
+            {open ? "收起" : "展开"} <Icon name="chevron" size={13} />
+          </span>
+        </button>
+        {group.running && (
+          <div className="work-live" aria-label="运行中">
+            <span className="work-dots">
+              <i />
+              <i />
+              <i />
+            </span>
+            {action && <span className="work-live-action">{action}</span>}
+          </div>
+        )}
+        {open && (
+          <div className="work-detail">
+            {group.thinking.map((text, index) => (
+              <details className="thinking-block" key={`thinking-${index}`}>
+                <summary>思考过程</summary>
+                <Markdown>{text}</Markdown>
+              </details>
+            ))}
+            {group.tools.map((tool) => (
+              <ToolCard key={tool.toolCallId} tool={tool} />
+            ))}
+            {group.notices.map((text, index) => (
+              <div className="notice-block" key={`notice-${index}`}>
+                {text}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </article>
+  );
 }
 
 export function RequestCard({
