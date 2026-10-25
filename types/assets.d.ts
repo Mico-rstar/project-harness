@@ -34,10 +34,6 @@ declare module "*.bdf" {
   const content: string;
   export default content;
 }
-declare module "*.css" {
-  const content: string;
-  export default content;
-}
 declare module "*/template.js" {
   const content: string;
   export default content;
@@ -51,6 +47,10 @@ declare module "axe-core/axe.min.js" {
   export default content;
 }
 declare module "*.kdl" {
+  const content: string;
+  export default content;
+}
+declare module "*.css" {
   const content: string;
   export default content;
 }

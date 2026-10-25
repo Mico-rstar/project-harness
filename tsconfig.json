@@ -4,6 +4,7 @@
     "lib": ["ESNext", "DOM.AsyncIterable"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
@@ -12,5 +13,6 @@
     "resolveJsonModule": true,
     "types": ["bun"]
   },
-  "include": ["src", "test", "scripts", "examples", "types"]
+  "include": ["src", "test", "scripts", "examples", "types"],
+  "exclude": ["src/web/client"]
 }

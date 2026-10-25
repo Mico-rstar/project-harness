@@ -60,6 +60,27 @@ function open(
 }
 
 describe("CooperationLog", () => {
+  test("default writer creates a nested observations directory and records survive reopen", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "cooperation-log-nested-"));
+    roots.push(root);
+    const directory = path.join(root, "project", "observations", "nested");
+    const file = path.join(directory, "cooperation.jsonl");
+    await expect(fs.access(directory)).rejects.toThrow();
+
+    const log = await open(file);
+    log.record(started("nested-message"));
+    await log.close();
+
+    const firstRead = await log.read();
+    expect(firstRead.items.map((item) => item.id)).toEqual(["nested-message"]);
+    expect(firstRead.coverage.hasGaps).toBe(false);
+
+    const reopened = await open(file);
+    const reopenedPage = await reopened.read();
+    expect(reopenedPage.items.map((item) => item.id)).toEqual(["nested-message"]);
+    expect(reopenedPage.coverage.hasGaps).toBe(false);
+  });
+
   test("persists complete IRC message identity and merges completion without changing start order", async () => {
     const file = await fixture();
     const log = await open(file);

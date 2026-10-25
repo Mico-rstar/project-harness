@@ -1,4 +1,5 @@
 import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import type { IrcObservation } from "@oh-my-pi/pi-coding-agent/irc/bus";
 import type { IrcMessage } from "@oh-my-pi/pi-tui/tools/irc";
 import { parseJsonlLenient } from "@oh-my-pi/pi-utils/stream";
@@ -144,6 +145,7 @@ function parseCursor(cursor: string): number {
 
 export class CooperationLog {
   static async open(options: CooperationLogOptions): Promise<CooperationLog> {
+    if (!options.writer) await fs.mkdir(path.dirname(options.file), { recursive: true });
     const log = new CooperationLog(options);
     await log.#load();
     return log;
