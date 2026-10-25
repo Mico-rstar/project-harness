@@ -61,6 +61,35 @@ describe("groupTranscript", () => {
     expect(fourth.kind === "message" && fourth.blocks[0]).toEqual({ type: "text", text: "second" });
   });
 
+  test("work segment IDs stay unique and stable as streamed content grows or history is prepended", () => {
+    const assistant = entry("assistant-1", "assistant", [
+      { type: "thinking", text: "plan" },
+      { type: "text", text: "first" },
+      toolBlock("call-1"),
+      { type: "text", text: "second" },
+      { type: "thinking", text: "follow-up" },
+    ]);
+    const initial = groupTranscript([assistant]);
+    const initialIds = initial.map((group) => group.id);
+    const initialWorkIds = workGroups(initial).map((group) => group.id);
+
+    const appended = groupTranscript([
+      { ...assistant, blocks: [...assistant.blocks, toolBlock("call-2")] },
+    ]);
+    const prepended = groupTranscript([
+      entry("older-user", "user", [{ type: "text", text: "earlier context" }]),
+      assistant,
+    ]);
+
+    expect(new Set(initialIds).size).toBe(initialIds.length);
+    expect(new Set(appended.map((group) => group.id)).size).toBe(appended.length);
+    expect(new Set(prepended.map((group) => group.id)).size).toBe(prepended.length);
+    expect(
+      workGroups(appended).slice(0, initialWorkIds.length).map((group) => group.id),
+    ).toEqual(initialWorkIds);
+    expect(workGroups(prepended).map((group) => group.id)).toEqual(initialWorkIds);
+  });
+
   test("streamed empty text placeholders do not terminate the running work group", () => {
     const groups = groupTranscript([
       entry("s", "assistant", [{ type: "text", text: "  " }, toolBlock("s1")]),

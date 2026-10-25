@@ -50,11 +50,14 @@ export function groupTranscript(
 ): TranscriptGroup[] {
   const groups: TranscriptGroup[] = [];
   const work: { current: WorkAccumulator | null } = { current: null };
+  const workSegments = new Map<string, number>();
 
   const ensureCurrent = (entry: WebEntry): WorkAccumulator => {
     if (!work.current) {
+      const segment = workSegments.get(entry.id) ?? 0;
+      workSegments.set(entry.id, segment + 1);
       work.current = {
-        id: entry.id,
+        id: segment === 0 ? entry.id : `${entry.id}:work${segment + 1}`,
         timestamp: entry.timestamp,
         tools: new Map(),
         thinking: [],

@@ -1,12 +1,12 @@
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   useSyncExternalStore,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
-  type RefObject,
 } from "react";
 import { createRoot } from "react-dom/client";
 import { createWebStore, type WebClientState, type WebStore } from "./store";
@@ -24,7 +24,6 @@ import {
   Icon,
   Markdown,
   RequestCard,
-  ToolCard,
   WorkGroup,
 } from "./components";
 import { agentDepth, groupMembers, groupTranscript } from "./groups";
@@ -125,7 +124,6 @@ export default function App({ store: providedStore }: { store?: WebStore }) {
   };
   const [cooperationOwner, setCooperationOwner] = useState<string | undefined>();
   const transcriptRef = useRef<HTMLDivElement>(null);
-  const feedRef = useRef<HTMLDivElement>(null);
   const pendingRef = useRef<HTMLElement>(null);
   const sendLock = useRef(false);
   const nearBottom = useRef(true);
@@ -196,14 +194,13 @@ export default function App({ store: providedStore }: { store?: WebStore }) {
     void store.loadCooperation(cooperationOwner);
   }, [cooperationOwner, store]);
 
-  // Switching views always lands on the latest content: reset stickiness and
-  // jump to the bottom; late-arriving history re-pins via the effect below.
+  // Reset transcript stickiness when switching views; late-arriving history
+  // re-pins via the effect below. CooperationFeed manages its own scrolling.
   useEffect(() => {
     nearBottom.current = true;
     clearFresh();
-    for (const element of [transcriptRef.current, feedRef.current]) {
-      element?.scrollTo({ top: element.scrollHeight });
-    }
+    const element = transcriptRef.current;
+    element?.scrollTo({ top: element.scrollHeight });
   }, [activeSessionId, view]);
 
   useEffect(() => {
@@ -682,9 +679,9 @@ export default function App({ store: providedStore }: { store?: WebStore }) {
 
           {view.kind === "cooperation" || (view.kind === "owner" && view.tab === "cooperation") ? (
             <CooperationFeed
+              key={cooperationOwner ?? "global"}
               messages={cooperation}
               state={state}
-              scrollRef={feedRef}
               onOpenOwner={(owner) => changeView({ kind: "owner", owner, tab: "session" })}
               onLoadMore={() =>
                 void store.loadCooperation(
@@ -801,13 +798,6 @@ export default function App({ store: providedStore }: { store?: WebStore }) {
                     label={sessionLabel(state, activeSessionId)}
                   />
                 ),
-              )}
-              {liveTools.length > 0 && (
-                <div className="live-tools">
-                  {liveTools.map((tool) => (
-                    <ToolCard key={tool.toolCallId} tool={tool} compact />
-                  ))}
-                </div>
               )}
             </div>
           )}
@@ -1295,7 +1285,6 @@ function Message({
 function CooperationFeed({
   messages,
   state,
-  scrollRef,
   onOpenOwner,
   onLoadMore,
   loading,
@@ -1303,12 +1292,38 @@ function CooperationFeed({
 }: {
   messages: WebCooperationMessage[];
   state: WebClientState;
-  scrollRef?: RefObject<HTMLDivElement | null>;
   onOpenOwner: (owner: WebOwner) => void;
   onLoadMore: () => void;
   loading: boolean;
   coverage?: { recordedSince: number | null; hasGaps: boolean; warnings: string[] };
 }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const nearBottom = useRef(true);
+  const previousScroll = useRef<{ firstId: string | undefined; height: number; top: number }>({
+    firstId: undefined,
+    height: 0,
+    top: 0,
+  });
+  useLayoutEffect(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+    const previous = previousScroll.current;
+    const prepended =
+      previous.firstId !== undefined &&
+      messages[0]?.id !== previous.firstId &&
+      messages.some((message) => message.id === previous.firstId);
+    if (prepended) {
+      element.scrollTop = previous.top + element.scrollHeight - previous.height;
+    } else if (nearBottom.current) {
+      element.scrollTop = element.scrollHeight;
+    }
+    previousScroll.current = {
+      firstId: messages[0]?.id,
+      height: element.scrollHeight,
+      top: element.scrollTop,
+    };
+  }, [messages, loading]);
+
   const owners = state.snapshot?.owners ?? [];
   const label = (id: string) => owners.find((owner) => owner.id === id)?.title ?? id;
   const openOwner = (id: string) => {
@@ -1316,7 +1331,16 @@ function CooperationFeed({
     if (owner) onOpenOwner(owner);
   };
   return (
-    <div className="cooperation-feed" ref={scrollRef}>
+    <div
+      className="cooperation-feed"
+      ref={scrollRef}
+      onScroll={(event) => {
+        const element = event.currentTarget;
+        nearBottom.current =
+          element.scrollHeight - element.scrollTop - element.clientHeight < 120;
+        previousScroll.current.top = element.scrollTop;
+      }}
+    >
       <div className="feed-intro">
         <div className="feed-icon">
           <Icon name="users" size={19} />
