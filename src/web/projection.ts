@@ -240,12 +240,15 @@ export function projectSnapshot(snapshot: RuntimeSnapshot): WebSnapshot {
     seq: snapshot.seq,
     mainSessionId: snapshot.mainSessionId,
     project: snapshot.project,
-    owners: snapshot.owners.map(({ id, title, branch, worktree }) => ({
-      id,
-      title,
-      branch,
-      worktree,
-    })),
+    owners: snapshot.owners.map(({ id, title, worktree, entries }) => {
+      const primary = entries[0];
+      return {
+        id,
+        title,
+        ...(primary?.checkout === undefined ? {} : { branch: primary.checkout }),
+        worktree,
+      };
+    }),
     agents: snapshot.agents.map(({ id, displayName, kind, parentId, status, activity }) => ({
       id,
       displayName,
