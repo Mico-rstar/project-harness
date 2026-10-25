@@ -12,9 +12,9 @@ export interface LaunchFlags {
   resume: boolean;
 }
 
-/** Resolves which project to open when one repository owns several. */
+/** Resolves which project to open when one project root owns several. */
 export type ProjectChooser = (projects: ProjectListing[]) => Promise<ProjectListing | null>;
-export type ProjectNamePrompt = (repoRoot: string) => Promise<string>;
+export type ProjectNamePrompt = (projectRoot: string) => Promise<string>;
 
 /**
  * Lowercase-slug candidate for a project name. Returns an empty string when
@@ -31,11 +31,11 @@ export function slugifyProjectName(input: string): string {
 }
 
 /**
- * Resolve the repository to bind, making it launch-ready on the way:
- * an explicit --repo always adopts its directory (init + empty initial commit
- * as needed), a bare launch only adopts a directory that is a Git repository
- * or completely empty, and every launch gives an unborn HEAD an initial
- * commit so owners can branch later.
+ * Resolve the project root to bind, making it launch-ready on the way.
+ * An explicit --repo always adopts its directory (init + empty initial commit
+ * as needed). A bare launch binds the surrounding Git repository as-is,
+ * adopts a populated non-Git directory without touching it, and gives an
+ * empty directory a Git repository so owners can branch later.
  */
 async function resolveRepoRoot(flags: LaunchFlags, cwd: string): Promise<RepoReady> {
   if (flags.repo !== undefined) {
@@ -46,18 +46,18 @@ async function resolveRepoRoot(flags: LaunchFlags, cwd: string): Promise<RepoRea
   }
   const entries = await fs.readdir(cwd);
   if (entries.length > 0) {
-    throw new Error(
-      `Not inside a Git repository: ${cwd}. Start inside a repository checkout or pass --repo <path>.`,
-    );
+    // Any populated directory can host a project; adoption never rewrites it.
+    return { root: await fs.realpath(cwd), bootstrap: { initialized: false, committed: false } };
   }
   return ensureRepoReady(cwd, { initIfMissing: true });
 }
 
 /**
  * Resolve CLI flags against the current directory and known projects.
- * A bare launch adopts the surrounding Git repository; an existing project
- * for that repository resumes instead of erroring; the project name defaults
- * to the repository directory name.
+ * A bare launch adopts the surrounding directory (Git repository as-is,
+ * populated non-Git directory without touching it); an existing project for
+ * that root resumes instead of erroring; the project name defaults to the
+ * directory name.
  */
 export async function resolveLaunchOptions(
   flags: LaunchFlags,
@@ -77,7 +77,7 @@ export async function resolveLaunchOptions(
     if (forRepo.length > 1) {
       if (!chooseProject) {
         throw new Error(
-          `This repository has multiple harness projects (${forRepo.map((item) => item.projectName).join(", ")}); pass --project <slug>.`,
+          `This project root has multiple harness projects (${forRepo.map((item) => item.projectName).join(", ")}); pass --project <slug>.`,
         );
       }
       const chosen = await chooseProject(forRepo);
