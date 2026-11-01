@@ -4,7 +4,6 @@ import * as path from "node:path";
 import { createMockModel } from "@oh-my-pi/pi-ai/providers/mock";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
-import * as vcs from "@oh-my-pi/pi-natives/vcs";
 import type { HarnessRuntime } from "../src/runtime";
 import { startMainSession } from "../src/runtime";
 
@@ -28,19 +27,13 @@ async function waitForTurn(
 }
 
 try {
-  const repoPath = path.join(root, "repo");
-  await fs.mkdir(path.join(repoPath, ".git", "objects"), { recursive: true });
-  await fs.mkdir(path.join(repoPath, ".git", "refs", "heads"), { recursive: true });
-  await Bun.write(path.join(repoPath, ".git", "HEAD"), "ref: refs/heads/main\n");
-  await Bun.write(
-    path.join(repoPath, ".git", "config"),
-    "[core]\nrepositoryformatversion = 0\nbare = false\n[user]\nname = Example\nemail = example@example.test\n",
-  );
-  await Bun.write(path.join(repoPath, "README.md"), "# Runtime example\n");
-  const repository = vcs.requireGit(repoPath);
-  await repository.stageFiles(["README.md"]);
-  await repository.commitCreate("Seed runtime example", {});
-  const canonicalRepoPath = await fs.realpath(repository.primaryRoot());
+  // Any populated directory can host a project; no Git repository required.
+  // Owners default to inheriting this root and can bind specific checkouts
+  // via spawn_owner workspace entries.
+  const projectRoot = path.join(root, "plain-workspace");
+  await fs.mkdir(projectRoot, { recursive: true });
+  await Bun.write(path.join(projectRoot, "README.md"), "# Runtime example\n");
+  const canonicalRoot = await fs.realpath(projectRoot);
 
   auth = await AuthStorage.create(":memory:");
   auth.keys.setRuntime(provider, "example-key");
@@ -72,7 +65,7 @@ try {
   if (!model) throw new Error("Mock model registration failed");
 
   runtime = await startMainSession(
-    { repo: canonicalRepoPath, project: "runtime-example", resume: false, dataHome: root },
+    { repo: canonicalRoot, project: "runtime-example", resume: false, dataHome: root },
     { kind: "headless" },
     {
       model,

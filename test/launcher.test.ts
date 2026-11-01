@@ -223,18 +223,47 @@ describe("launch option resolution", () => {
     expect(cancelled.calls).toHaveLength(1);
   });
 
-  test("launches outside a Git repository fail with guidance in the message", async () => {
+  test("a bare launch adopts a populated non-Git directory without touching it", async () => {
     const f = await gitFixture();
     const outside = path.join(path.dirname(f.repo), "plain");
     await fs.mkdir(outside, { recursive: true });
     await Bun.write(path.join(outside, "keep.txt"), "x\n");
-    await expect(resolveLaunchOptions({ resume: false }, outside, f.dataHome)).rejects.toThrow(
-      "Not inside a Git repository",
-    );
+    const options = await resolveLaunchOptions({ resume: false }, outside, f.dataHome);
+    expect(options.repo).toBe(outside);
+    expect(options.project).toBe("plain");
+    expect(options.bootstrap).toEqual({ initialized: false, committed: false });
+    expect(vcs.git(outside) ?? null).toBeNull();
+    expect(await Bun.file(path.join(outside, "keep.txt")).text()).toBe("x\n");
     const missing = path.join(path.dirname(f.repo), "absent");
     await expect(
       resolveLaunchOptions({ repo: missing, resume: false }, f.repo, f.dataHome),
     ).rejects.toThrow("Repository path does not exist");
+  });
+
+  test("a bare launch in a non-Git directory resumes its project via the root hash", async () => {
+    const root = await temporary();
+    const plain = path.join(root, "container");
+    await fs.mkdir(plain);
+    await Bun.write(path.join(plain, "readme.md"), "hi\n");
+    const dataHome = path.join(root, "data");
+    const store = await ProjectStore.open({
+      repo: plain,
+      project: "demo",
+      resume: false,
+      dataHome,
+    });
+    stores.push(store);
+    const session = path.join(store.paths.sessions, "main.jsonl");
+    await Bun.write(session, '{"type":"session"}\n');
+    await store.initialize(session);
+    store.release();
+    const options = await resolveLaunchOptions({ resume: false }, plain, dataHome);
+    expect(options).toEqual({
+      repo: plain,
+      project: "demo",
+      resume: true,
+      bootstrap: { initialized: false, committed: false },
+    });
   });
 
   test("a bare launch in an empty directory adopts and bootstraps it", async () => {
@@ -265,6 +294,27 @@ describe("launch option resolution", () => {
     );
     expect(promptedFor).toBe(directory);
     expect(options.project).toBe("web-project");
+  });
+
+  test("a populated non-Git directory without slug material also asks its host for a name", async () => {
+    const root = await temporary();
+    const directory = path.join(root, "東京");
+    await fs.mkdir(directory);
+    await Bun.write(path.join(directory, "doc.txt"), "x\n");
+    let promptedFor = "";
+    const options = await resolveSharedLaunchOptions(
+      { resume: false },
+      directory,
+      path.join(root, "data"),
+      async () => null,
+      async (projectRoot) => {
+        promptedFor = projectRoot;
+        return "web-project";
+      },
+    );
+    expect(promptedFor).toBe(directory);
+    expect(options.project).toBe("web-project");
+    expect(options.bootstrap).toEqual({ initialized: false, committed: false });
   });
 
   test("shared launch resolution lets a noninteractive host reject implicit project selection", async () => {

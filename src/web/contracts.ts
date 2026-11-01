@@ -53,7 +53,8 @@ export type WebUIResponse =
 export interface WebOwner {
   id: string;
   title: string;
-  branch: string;
+  /** Primary workspace entry's checkout branch, when it is a Git worktree. */
+  branch?: string;
   worktree: string;
 }
 export interface WebAgent {

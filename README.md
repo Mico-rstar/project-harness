@@ -1,8 +1,8 @@
 # Project Harness MVP
 
-独立的 Bun + TypeScript 程序，通过本地 oh-my-pi SDK 运行一个长期 Main 和多个长期 owner。Main 与人讨论项目、维护记忆和设计文档；每个 owner 在独立 Git worktree 中负责一项需求，并使用原生 task agent 组织实施、review 和测试。
+独立的 Bun + TypeScript 程序，通过本地 oh-my-pi SDK 运行一个长期 Main 和多个长期 owner。Main 与人讨论项目、维护记忆和设计文档；每个 owner 在自己的工作区（Git worktree、继承的目录或绑定的已有 checkout）中负责一项需求，并使用原生 task agent 组织实施、review 和测试。
 
-协作沿用 omp 的原生 TUI、IRC、Agent Hub 和会话转录。项目共识放在普通 Markdown 文件中，`project.json` 只保存仓库、worktree 和会话绑定。
+协作沿用 omp 的原生 TUI、IRC、Agent Hub 和会话转录。项目共识放在普通 Markdown 文件中，`project.json` 只保存项目根、工作区和会话绑定。
 
 ## 安装
 
@@ -92,18 +92,19 @@ cd /path/to/your/repo
 project
 ```
 
-- 当前仓库没有项目时直接创建，项目名默认为仓库目录名（小写 slug）。
-- 当前仓库已有项目时直接恢复，等价于显式 `--resume`；同一仓库绑定多个项目时会出现选择列表。
-- **从零开始新项目**：完全空白的目录（无 `.git`）会被自动接管——`git init` 并补一个空的初始提交（绝不暂存用户文件）；`git init` 过但 0 提交的仓库同样自动补空提交。此操作要求仓库已配置 `user.name` 和 `user.email`；若 index 已有暂存内容，会拒绝启动并保留暂存内容。owner 的分支从这个提交创建。
-- 非空且非 Git 的目录会拒绝启动并提示；此时显式 `--repo` 指定的目录无论是否为 Git 仓库都会被自动接管。
-- `--repo` 指向不存在的路径会报错，不会隐式创建目录。
+- 当前目录没有项目时直接创建，项目名默认为目录名（小写 slug）。
+- 当前目录已有项目时直接恢复，等价于显式 `--resume`；同一项目根绑定多个项目时会出现选择列表。
+- **Git 仓库**：按现状绑定规范化后的主仓库根；`git init` 过但 0 提交的仓库自动补一个空初始提交（绝不暂存用户文件）。此操作要求仓库已配置 `user.name` 和 `user.email`；若 index 已有暂存内容，会拒绝启动并保留暂存内容。owner 的分支从这个提交创建。
+- **非空且非 Git 的目录**：直接接管为项目根，不执行 `git init`、不改动任何用户文件。
+- **完全空白的目录**：自动接管——`git init` 并补空初始提交，让 owner 缺省就能用 Git worktree 隔离。
+- 显式 `--repo` 指定的目录无论是否为 Git 仓库都会被接管；指向不存在的路径会报错，不会隐式创建目录。
 
 也可以显式指定，参数可按需组合：
 
 ```sh
-project --repo /absolute/path/to/repo              # 项目名默认取仓库目录名
-project --repo /absolute/path/to/repo --project my-project
-project --repo /absolute/path/to/repo --project my-project --resume
+project --repo /absolute/path/to/dir              # 项目名默认取目录名
+project --repo /absolute/path/to/dir --project my-project
+project --repo /absolute/path/to/dir --project my-project --resume
 ```
 
 也可以在本目录执行 `bun link` 注册 CLI（bin 名为 `project`），或用 `bun run dev` 加同样的参数。确保 `~/.bun/bin` 在 PATH 中。
@@ -119,7 +120,7 @@ project --web --repo /path/to/repo --project demo
 bun run dev:web -- --repo /path/to/repo --project demo
 ```
 
-启动后终端会打印实际访问地址。`--port` 仅能与 `--web` 一起使用。Web 模式不会打开终端选择器：同一仓库存在多个 harness 项目，或目录名无法生成有效 slug 时，请显式传入 `--project`。恢复与默认项目发现规则和 TUI 相同。关闭进程会停止本机 HTTP 服务、结束 runtime 并释放项目锁；关闭浏览器标签不会结束服务或 runtime。
+启动后终端会打印实际访问地址。`--port` 仅能与 `--web` 一起使用。Web 模式不会打开终端选择器：同一项目根存在多个 harness 项目，或目录名无法生成有效 slug 时，请显式传入 `--project`。恢复与默认项目发现规则和 TUI 相同。关闭进程会停止本机 HTTP 服务、结束 runtime 并释放项目锁；关闭浏览器标签不会结束服务或 runtime。
 
 界面使用深色配色，左侧导航选择 Main、owner 任务或全局协作；中央区域显示会话和消息，右侧面板查看运行活动与待响应请求。输入始终发给 Main。标题栏菜单可切换输入行为：`followUp` 将消息排到当前轮次之后，`steer` 用于引导正在进行的轮次。输入区只有一个主按钮：有草稿时发送消息；草稿为空且 Main 正在运行时用于停止 Main 当前轮次。停止也可从标题栏菜单选择。
 
@@ -127,16 +128,16 @@ bun run dev:web -- --repo /path/to/repo --project demo
 
 工作台展示 Main、owner、子代理会话与 IRC 的实际运行活动。空闲或某个工具调用结束不代表需求完成；Main 仍负责评估进展并与用户讨论。首版输入发送给 Main，不提供直接向 owner/IRC 发消息、图片输入或共享资料浏览。
 
-项目名和 owner ID 使用 1–64 字符的小写字母、数字和单连字符 slug；owner ID `main` 为保留身份。`--repo` 可以指向主仓库内的子目录或该仓库的 linked worktree，数据绑定到规范化后的主仓库根路径。
+项目名和 owner ID 使用 1–64 字符的小写字母、数字和单连字符 slug；owner ID `main` 为保留身份。Git 目录的项目根绑定到规范化后的主仓库根路径（含其子目录与 linked worktree）；非 Git 目录的项目根就是该目录本身（规范化路径）。
 
-已有项目无需显式 `--resume`，按仓库和项目名匹配到已存在的项目即自动恢复。启动期间持有项目独占锁，同一项目不能被两个 harness 进程同时打开。
+已有项目无需显式 `--resume`，按项目根和项目名匹配到已存在的项目即自动恢复。启动期间持有项目独占锁，同一项目不能被两个 harness 进程同时打开。
 
 ## 工作目录与协作
 
 项目数据位于仓库外：
 
 ```text
-~/.local/share/project-harness/<规范主仓库路径哈希>/<项目名>/
+~/.local/share/project-harness/<项目根路径哈希>/<项目名>/
 ├── project.json
 ├── main/
 │   ├── memory/MEMORY.md
@@ -156,8 +157,9 @@ bun run dev:web -- --repo /path/to/repo --project demo
 ```
 
 - **Main**：cwd 为 `main/`，附加工作区为整个 `shared/`。维护记忆索引、主题记忆文件和设计 wiki；具体代码调查交给 owner。
-- **owner**：cwd 为自己的代码 worktree，附加工作区为 `shared/<ownerId>/`。分支为 `project-agent/<项目名>/<ownerId>`，从主仓库已提交的 HEAD 创建。
-- **owner 的 task agent**：继承 owner 的工作区；task isolation 关闭，因此共用代码 worktree，需要协调同时修改同一文件的行为。
+- **owner**：cwd 为主工作区，附加工作区为 `shared/<ownerId>/` 及其余 workspace 条目。缺省时：Git 项目根分配独立 worktree（分支 `project-agent/<项目名>/<ownerId>`，从已提交的 HEAD 创建）；非 Git 项目根直接继承项目根本身。
+- **workspace 条目**：`spawn_owner` 可传 `workspace`（绝对路径，或 `[{from, checkout?}]` 列表）绑定已有目录。无 `checkout` 的条目原地使用该目录；有 `checkout` 的条目从所在 Git 仓按该分支切出 worktree（分支已存在则附着），落点在 `worktrees/<ownerId>[-N]`。第一个条目为主工作区（会话 cwd），其余条目进附加根。工作区目录跨 owner 独占，也不能指向 harness 自管的 `main/`、`shared/`。
+- **owner 的 task agent**：继承 owner 的工作区；task isolation 关闭，因此共用工作区，需要协调同时修改同一文件的行为。
 
 这些配置是工作区上下文，不构成文件系统沙箱。
 
@@ -196,8 +198,9 @@ bun run test:integration
 
 - **包无法解析**：确认已在对应 omp 包目录执行 `bun link`，再在 harness 执行 `bun install`。
 - **native addon 无法加载**：优先完成 omp 的 `bun setup`。若使用当前环境的兼容性回退，确认是普通文件副本且平台正确；不要依赖会被清理的旧缓存软链接。
-- **owner 创建中途失败**：错误会列出保留的分支、worktree 和会话路径。先人工检查这些资源及日志；MVP 不自动收养、删除或重建未绑定资源，下次发现冲突会明确报错。
-- **恢复时会话或 worktree 缺失、仓库或分支错绑**：启动失败，不自动创建替代会话。先定位并恢复正确资源。owner 在原分支上的新提交和脏修改允许保留。
+- **owner 创建中途失败**：错误会列出保留的工作区（含分支）、会话路径。先人工检查这些资源及日志；MVP 不自动收养、删除或重建未绑定资源，下次发现冲突会明确报错。
+- **恢复时会话或工作区目录缺失、仓库或分支错绑**：启动失败，不自动创建替代会话。先定位并恢复正确资源；绑定的外部目录不可移动或重命名。owner 在原分支上的新提交和脏修改允许保留。
+- **同仓多 owner**：同一仓库的不同分支可各切一个 worktree 并行；同一分支不能被两个 worktree 同时检出（Git 限制）。继承型条目跨 owner 独占，第二个缺省 spawn 会被拒绝并提示显式分流。
 - **退出**：停止接收新 owner，abort/dispose 已创建会话，保留共享文件、代码 worktree、分支和转录。使用同一项目名加 `--resume` 恢复。
 
 MVP 没有结构化进度状态、审批状态机、额外项目面板或完整 task observer UI。提交、合并、推送和 PR 均需遵守目标仓库规则并取得授权，runtime 不自动执行。omp 的必要 SDK 补丁由 fork 的 `harness-runtime` 分支维护；native 是忽略的本机构建产物，依赖基线与升级约束见维护指南。

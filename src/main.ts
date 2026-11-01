@@ -52,11 +52,14 @@ if (import.meta.main) {
     if (!flags) {
       process.stdout.write(
         [
-          "Usage: project [--repo <Git repository>] [--project <slug>] [--resume] [--web [--port <0..65535>]]",
+          "Usage: project [--repo <directory>] [--project <slug>] [--resume] [--web [--port <0..65535>]]",
           "",
-          "Run bare inside a Git repository to create its harness project, or to",
-          "resume it when one already exists. The project name defaults to the",
-          "repository directory name; pass --project to choose another.",
+          "Run bare inside any directory to create its harness project, or to resume",
+          "it when one already exists. A Git repository binds as-is; a populated",
+          "non-Git directory is adopted without touching it; an empty directory is",
+          "given a Git repository. --repo always makes its directory a Git",
+          "repository. The project name defaults to the directory name; pass",
+          "--project to choose another.",
           "Use --web to start the local browser interface (default port 4173).",
           "",
         ].join("\n"),

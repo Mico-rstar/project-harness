@@ -3,6 +3,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { createMockModel, type MockContent } from "@oh-my-pi/pi-ai/providers/mock";
+import type { Model } from "@oh-my-pi/pi-ai";
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
@@ -11,13 +12,56 @@ import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manage
 import { AgentRegistry } from "@oh-my-pi/pi-coding-agent/registry/agent-registry";
 import * as vcs from "@oh-my-pi/pi-natives/vcs";
 import { ProjectStore } from "../src/runtime/project";
-import { OwnerCoordinator } from "../src/runtime/owners";
+import { OwnerCoordinator, workspaceRoots } from "../src/runtime/owners";
 import { projectExtension } from "../src/runtime/extension";
 import { MAIN_TOOLS } from "../src/runtime/main-session";
 import { validateSessionWorkspace } from "../src/runtime/sessions";
 
 function call(name: string, argumentsValue: Record<string, unknown>): MockContent {
   return { type: "toolCall", name, arguments: argumentsValue };
+}
+
+async function openMainSession(options: {
+  store: ProjectStore;
+  coordinator: OwnerCoordinator;
+  registry: ModelRegistry;
+  auth: AuthStorage;
+  settings: Settings;
+  model: Model;
+  resuming: boolean;
+}): Promise<CreateAgentSessionResult> {
+  const { store, coordinator, registry, auth, settings, model, resuming } = options;
+  const manager = resuming
+    ? await SessionManager.open(store.manifest!.mainSessionFile, undefined, undefined, {
+        throwIfMissing: true,
+      })
+    : SessionManager.create(store.paths.main, store.paths.sessions);
+  const result = await createAgentSession({
+    cwd: store.paths.main,
+    additionalDirectories: [store.paths.shared],
+    sessionManager: manager,
+    model,
+    modelRegistry: registry,
+    authStorage: auth,
+    settings,
+    bindProcessState: false,
+    hasUI: false,
+    enableMCP: false,
+    enableLsp: false,
+    disableExtensionDiscovery: true,
+    extensions: [projectExtension(coordinator)],
+    contextFiles: [],
+    skills: [],
+    rules: [],
+    promptTemplates: [],
+    slashCommands: [],
+    toolNames: MAIN_TOOLS,
+  });
+  await result.session.setActiveToolsByName(MAIN_TOOLS);
+  await manager.ensureOnDisk();
+  if (!resuming) await store.initialize(manager.getSessionFile()!);
+  coordinator.attachMain(result);
+  return result;
 }
 
 describe("SDK owner coordination", () => {
@@ -179,39 +223,8 @@ describe("SDK owner coordination", () => {
       externalThinking: false,
     });
 
-    async function openMain(resuming: boolean): Promise<CreateAgentSessionResult> {
-      const manager = resuming
-        ? await SessionManager.open(store.manifest!.mainSessionFile, undefined, undefined, {
-            throwIfMissing: true,
-          })
-        : SessionManager.create(store.paths.main, store.paths.sessions);
-      const result = await createAgentSession({
-        cwd: store.paths.main,
-        additionalDirectories: [store.paths.shared],
-        sessionManager: manager,
-        model,
-        modelRegistry: registry,
-        authStorage: auth,
-        settings,
-        bindProcessState: false,
-        hasUI: false,
-        enableMCP: false,
-        enableLsp: false,
-        disableExtensionDiscovery: true,
-        extensions: [projectExtension(coordinator)],
-        contextFiles: [],
-        skills: [],
-        rules: [],
-        promptTemplates: [],
-        slashCommands: [],
-        toolNames: MAIN_TOOLS,
-      });
-      await result.session.setActiveToolsByName(MAIN_TOOLS);
-      await manager.ensureOnDisk();
-      if (!resuming) await store.initialize(manager.getSessionFile()!);
-      coordinator.attachMain(result);
-      return result;
-    }
+    const openMain = (resuming: boolean) =>
+      openMainSession({ store, coordinator, registry, auth, settings, model, resuming });
     try {
       main = await openMain(false);
       const originalMainFile = main.session.sessionManager.getSessionFile();
@@ -336,9 +349,8 @@ describe("SDK owner coordination", () => {
       for (const binding of store.manifest!.owners) {
         const owner = AgentRegistry.global().get(binding.id)!;
         expect(owner.status).toBe("idle");
-        await validateSessionWorkspace(owner.session!.sessionManager, binding.worktree, [
-          binding.sharedDir,
-        ]);
+        const { cwd, additional } = workspaceRoots(binding);
+        await validateSessionWorkspace(owner.session!.sessionManager, cwd, additional);
         expect(
           owner.session!.messages.some((message) =>
             JSON.stringify(message).includes("implementation completed"),
@@ -351,6 +363,196 @@ describe("SDK owner coordination", () => {
         const history = await read.execute(`restored-history-${id}`, { path: `history://${id}` });
         expect(history.isError).not.toBe(true);
         expect(JSON.stringify(history.content)).toContain("source.txt");
+      }
+    } finally {
+      await coordinator.dispose();
+      await main?.session.dispose();
+      store.release();
+      registry.unregisterProvider("harness-test");
+      await auth.close();
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  test("non-Git project roots inherit the root and honor explicit workspace entries", async () => {
+    const root = await fs.realpath(
+      await fs.mkdtemp(path.join(os.tmpdir(), "harness-workspaces-")),
+    );
+    const container = path.join(root, "container");
+    await fs.mkdir(container);
+    await Bun.write(path.join(container, "notes.md"), "container\n");
+    const seedRepo = async (dir: string, file: string) => {
+      await fs.mkdir(path.join(dir, ".git", "objects"), { recursive: true });
+      await fs.mkdir(path.join(dir, ".git", "refs", "heads"), { recursive: true });
+      await Bun.write(path.join(dir, ".git", "HEAD"), "ref: refs/heads/main\n");
+      await Bun.write(
+        path.join(dir, ".git", "config"),
+        "[core]\nrepositoryformatversion = 0\nbare = false\n[user]\nname = Harness\nemail = harness@example.test\n",
+      );
+      await Bun.write(path.join(dir, file), "original\n");
+      const repo = vcs.requireGit(dir);
+      await repo.stageFiles([file]);
+      await repo.commitCreate("Fixture", {});
+      return repo;
+    };
+    const a1 = path.join(container, "a1");
+    const a2 = path.join(container, "a2");
+    const repoA2 = await seedRepo(a2, "lib.txt");
+    await seedRepo(a1, "lib.txt");
+    const plainDir = path.join(root, "plain-dir");
+    await fs.mkdir(plainDir);
+
+    let store = await ProjectStore.open({
+      repo: container,
+      project: "multi",
+      resume: false,
+      dataHome: root,
+    });
+    let coordinator = new OwnerCoordinator(store);
+    const auth = await AuthStorage.create(":memory:");
+    auth.keys.setRuntime("harness-test", "test-key");
+    const registry = new ModelRegistry(auth, path.join(root, "models.yml"));
+    const mock = createMockModel({
+      provider: "harness-test",
+      handler: () => ({ content: ["Idle."] }),
+    });
+    registry.registerProvider("harness-test", {
+      baseUrl: "http://127.0.0.1:1",
+      apiKey: "test-key",
+      api: "harness-script",
+      streamSimple: (_model, context, options) => mock.stream(_model, context, options),
+      models: [
+        {
+          id: "test-model",
+          name: "Harness test model",
+          reasoning: false,
+          input: ["text"],
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          contextWindow: 200_000,
+          maxTokens: 8192,
+        },
+      ],
+    });
+    const model = registry.find("harness-test", "test-model");
+    if (!model) throw new Error("Test provider did not register");
+    const settings = Settings.isolated({
+      "memory.backend": "off",
+      "autolearn.enabled": false,
+      "tools.xdev": false,
+      "advisor.enabled": false,
+      "task.isolation.enabled": false,
+      "task.maxRecursionDepth": 2,
+      "tools.approvalMode": "yolo",
+      externalThinking: false,
+    });
+    const openMain = (resuming: boolean) =>
+      openMainSession({ store, coordinator, registry, auth, settings, model, resuming });
+    let main: CreateAgentSessionResult | undefined;
+    try {
+      main = await openMain(false);
+      for (const id of ["req-root", "req-x", "req-attach", "req-y", "neg-1", "neg-2", "neg-3"]) {
+        await Bun.write(path.join(store.paths.shared, id, "requirement.md"), `Do ${id}`);
+      }
+      const spawnTool = main.session.getToolByName("spawn_owner");
+      if (!spawnTool) throw new Error("Main spawn_owner is unavailable");
+
+      // Default spawn in a non-Git root inherits the project root itself.
+      const defaultLaunch = await spawnTool.execute("spawn-default", {
+        ownerId: "req-root",
+        title: "Root work",
+      });
+      expect(defaultLaunch.isError).not.toBe(true);
+      const defaultBinding = store.getOwner("req-root");
+      expect(defaultBinding?.entries).toEqual([{ path: container }]);
+      expect(defaultBinding?.worktree).toBe(container);
+      const rootOwner = AgentRegistry.global().get("req-root");
+      expect(rootOwner?.session?.sessionManager.getCwd()).toBe(container);
+
+      // Mixed entries: inherit a1 in place, cut an a2 worktree on a new branch.
+      const mixed = await spawnTool.execute("spawn-mixed", {
+        ownerId: "req-x",
+        title: "Cross repo",
+        workspace: [{ from: a1 }, { from: a2, checkout: "feat-x" }],
+      });
+      expect(mixed.isError).not.toBe(true);
+      const mixedBinding = store.getOwner("req-x");
+      expect(mixedBinding?.worktree).toBe(a1);
+      expect(mixedBinding?.entries[0]).toEqual({ path: a1 });
+      const cut = mixedBinding?.entries[1];
+      expect(cut?.checkout).toBe("feat-x");
+      expect(cut?.repo).toBe(a2);
+      expect(cut?.path).toBe(path.join(store.paths.worktrees, "req-x"));
+      expect(await repoA2.currentBranch()).toBe("main");
+      const mixedOwner = AgentRegistry.global().get("req-x");
+      expect(mixedOwner?.session?.sessionManager.getCwd()).toBe(a1);
+      expect(mixedOwner?.session?.sessionManager.getAdditionalDirectories()).toContain(cut?.path);
+
+      // Negative contracts surface as tool errors Main can self-correct from.
+      const relative = await spawnTool.execute("neg-relative", {
+        ownerId: "neg-1",
+        title: "N",
+        workspace: "a1",
+      });
+      expect(relative.isError).toBe(true);
+      expect(JSON.stringify(relative.content)).toContain("absolute path");
+      const missing = await spawnTool.execute("neg-missing", {
+        ownerId: "neg-2",
+        title: "N",
+        workspace: [{ from: path.join(root, "absent") }],
+      });
+      expect(missing.isError).toBe(true);
+      expect(JSON.stringify(missing.content)).toContain("does not exist");
+      const notGit = await spawnTool.execute("neg-git", {
+        ownerId: "neg-3",
+        title: "N",
+        workspace: [{ from: plainDir, checkout: "feature" }],
+      });
+      expect(notGit.isError).toBe(true);
+      expect(JSON.stringify(notGit.content)).toContain("not inside a Git repository");
+
+      // Workspace entries are exclusive: the inherited root cannot host a second owner.
+      await expect(coordinator.spawn("req-y", "Second root work")).rejects.toThrow(
+        "already occupied",
+      );
+
+      // An explicit checkout of an existing branch attaches instead of failing.
+      const attachBase = await repoA2.headSha();
+      if (!attachBase) throw new Error("Fixture repository must have a commit");
+      await repoA2.createBranch("feat-y", attachBase, false);
+      await coordinator.spawn("req-attach", "Attach work", undefined, {
+        entries: [{ from: a2, checkout: "feat-y" }],
+      });
+      const featYSha = await repoA2.resolveRef("refs/heads/feat-y");
+      if (!featYSha) throw new Error("Fixture branch must resolve");
+      const attachBinding = store.getOwner("req-attach");
+      expect(attachBinding?.entries[0]?.checkout).toBe("feat-y");
+      expect(attachBinding?.entries[0]?.baseSha).toBe(featYSha);
+      expect(attachBinding?.worktree).toBe(path.join(store.paths.worktrees, "req-attach"));
+
+      await coordinator.dispose();
+      await main.session.dispose();
+      store.release();
+      store = await ProjectStore.open({
+        repo: container,
+        project: "multi",
+        resume: true,
+        dataHome: root,
+      });
+      coordinator = new OwnerCoordinator(store);
+      main = await openMain(true);
+      const callsBeforeResume = mock.calls.length;
+      await coordinator.restore();
+      expect(mock.calls.length).toBe(callsBeforeResume);
+      expect(store.manifest?.owners.map((owner) => owner.id).sort()).toEqual([
+        "req-attach",
+        "req-root",
+        "req-x",
+      ]);
+      for (const binding of store.manifest!.owners) {
+        const owner = AgentRegistry.global().get(binding.id)!;
+        expect(owner.status).toBe("idle");
+        const { cwd, additional } = workspaceRoots(binding);
+        await validateSessionWorkspace(owner.session!.sessionManager, cwd, additional);
       }
     } finally {
       await coordinator.dispose();

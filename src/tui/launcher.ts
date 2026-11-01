@@ -11,8 +11,8 @@ import {
 
 export { slugifyProjectName, type LaunchFlags, type ProjectChooser } from "../launch";
 
-export async function promptForProjectName(repoRoot: string): Promise<string> {
-  let title = `Project name for ${repoRoot} (lowercase slug, Enter to confirm):`;
+export async function promptForProjectName(projectRoot: string): Promise<string> {
+  let title = `Project name for ${projectRoot} (lowercase slug, Enter to confirm):`;
   for (;;) {
     const answer = await promptStandaloneText(title);
     if (answer === null) throw new Error("A project name is required to start");
@@ -26,7 +26,7 @@ export async function promptForProjectName(repoRoot: string): Promise<string> {
 
 export const chooseProjectInteractively: ProjectChooser = async (projects) => {
   const value = await selectStandaloneItem(
-    "This repository has multiple harness projects:",
+    "This project root has multiple harness projects:",
     projects.map((listing) => ({
       value: listing.projectName,
       label: listing.projectName,

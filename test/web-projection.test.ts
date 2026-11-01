@@ -81,11 +81,18 @@ describe("Web presentation boundary", () => {
         {
           id: "one",
           title: "First",
-          branch: "task",
           worktree: "/work",
-          baseSha: "sha",
+          entries: [{ path: "/work", repo: "/secret-repo", checkout: "task", baseSha: "deadbeefsha" }],
           sharedDir: "/shared",
           sessionFile: "/private/owner.jsonl",
+        },
+        {
+          id: "two",
+          title: "Second",
+          worktree: "/bound",
+          entries: [{ path: "/bound" }],
+          sharedDir: "/shared-two",
+          sessionFile: "/private/two.jsonl",
         },
       ],
       agents: [
@@ -118,12 +125,12 @@ describe("Web presentation boundary", () => {
     const json = JSON.stringify(projectSnapshot(snapshot));
     expect(json).not.toContain("/private/");
     expect(json).not.toContain("private-image-bytes");
-    expect(JSON.parse(json).owners[0]).toEqual({
-      id: "one",
-      title: "First",
-      branch: "task",
-      worktree: "/work",
-    });
+    expect(json).not.toContain("deadbeefsha");
+    expect(json).not.toContain("secret-repo");
+    expect(JSON.parse(json).owners).toEqual([
+      { id: "one", title: "First", branch: "task", worktree: "/work" },
+      { id: "two", title: "Second", worktree: "/bound" },
+    ]);
   });
 
   test("agent-to-agent IRC deliveries and contentless opaque entries stay out of the transcript", () => {
